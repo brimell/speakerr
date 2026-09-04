@@ -318,15 +318,35 @@ loop:
   reusing the existing `InteractiveDelayCommand` parser from Phase 1;
 - `quit` / Ctrl-C — stop the session (idempotent; safe to call twice).
 
-## 11. Reconnect measurements — outstanding
+## 11. Reconnect measurements
 
-Not collected in this session (no hardware attached). To be run per the
-"Reconnection experiment" and "Hardware validation" sections of the task
-brief: old/new offset, time-to-usable, notification counts, whether the
-`AudioObjectID` changed, whether the sample rate changed, for both MIDDLETON
-and Bose, repeated several times, plus the 10-minute steady-state system
-audio run, the sleep/wake run, and the "calibrate -> system audio -> stays
-valid" run.
+Collected on 4 September 2026 with the real Bose SoundLink Max + MIDDLETON,
+driving `speakerr-test system-audio` interactively (stdin fed through a
+named pipe so the process stayed alive across the physical
+disconnect/reconnect):
+
+| Step | Observed |
+| --- | --- |
+| Standalone `calibrate` (sanity check) | B-A -71.66 ms -> converged to -1.55 ms residual |
+| `system-audio` calibrate | Converged to -0.27 ms residual, state `aligned`, BlackHole attached as programme input |
+| Disconnect MIDDLETON | `CoreAudioDeviceMonitor` detected it within the debounce window; state -> `unavailable("one or more selected outputs are not currently connected")`; `calibrationSnapshot` cleared; output unit stopped/disposed and aggregate destroyed; render callbacks reset to 0; transport drained with 0 underflows/overflows/dropped frames |
+| Reconnect MIDDLETON | Detected automatically; `performRebuild(.deviceReconnected)` resolved both UIDs to current `AudioObjectID`s, recreated the private aggregate and output unit, and resumed rendering (callback count climbing again: 488, then 746); state -> `calibrationStale(deviceReconnected)` — the **prior 58.62 ms calibration was not treated as valid**, even though its numeric delay was still applied pending recalibration |
+| Recalibrate after rebuild | Converged to +1.38 ms residual; state -> `aligned`; render-callback count kept climbing continuously through calibrate/status calls afterwards (up to 4536), confirming the output session was not restarted again by the recalibration itself |
+
+This directly confirms the two central claims of this phase on real
+hardware: (1) a reconnect is detected and safely rebuilt without leaving a
+corrupt aggregate or a hung capture unit, and (2) the stale calibration is
+never silently reused — the CLI explicitly reported `stale/none` until a
+fresh calibration pass completed.
+
+Not yet collected: the 10-minute steady-state system-audio run with real
+programme material, the sleep/wake run, and repeated multi-trial timing
+statistics (old offset vs new offset variance) for both the Bose and
+MIDDLETON sides individually. The BlackHole capture path itself also has not
+yet been exercised with real audio content (no application was routed to
+BlackHole during this test), only with silence, so transport counters above
+read `captured=0`/`rendered=0` — the plumbing was verified, not real audio
+throughput.
 
 ## 12. Sleep/wake behaviour
 

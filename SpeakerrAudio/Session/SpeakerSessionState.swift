@@ -22,6 +22,22 @@ public enum SpeakerSessionState: Sendable, Equatable {
     case failed(String)
 }
 
+public struct CalibrationProgressUpdate: Sendable, Equatable {
+    public enum Phase: Sendable, Equatable {
+        case measuring(speakerIndex: Int, speakerName: String, pass: Int, totalPasses: Int, measurement: Int, totalMeasurements: Int)
+        case applyingCorrection(residualMilliseconds: Double)
+        case verifying(pass: Int)
+    }
+
+    public let phase: Phase
+    public let progressFraction: Double?
+
+    public init(phase: Phase, progressFraction: Double? = nil) {
+        self.phase = phase
+        self.progressFraction = progressFraction
+    }
+}
+
 public enum SpeakerSessionEvent: Sendable, Equatable {
     case prepare
     case prepared
@@ -29,6 +45,7 @@ public enum SpeakerSessionEvent: Sendable, Equatable {
     case calibrationSucceeded
     case calibrationFailed(String)
     case invalidate(CalibrationStaleReason)
+    case cancelCalibration(SpeakerSessionState)
     case beginRebuild
     case rebuildSucceeded
     case outputUnavailable(String)
@@ -61,6 +78,7 @@ public struct SpeakerSessionStateMachine: Sendable {
         case (.ready, .beginCalibration), (.aligned, .beginCalibration), (.calibrationStale, .beginCalibration): next = .calibrating
         case (.calibrating, .calibrationSucceeded): next = .aligned
         case (.calibrating, .calibrationFailed(let message)): next = .failed(message)
+        case (.calibrating, .cancelCalibration(let priorState)): next = priorState
         case (.ready, .invalidate(let reason)), (.aligned, .invalidate(let reason)),
              (.calibrating, .invalidate(let reason)): next = .calibrationStale(reason)
         case (.calibrationStale, .invalidate(let reason)): next = .calibrationStale(reason)
