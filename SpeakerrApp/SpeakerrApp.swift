@@ -19,6 +19,14 @@ final class SpeakerrAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        Task { @MainActor in
+            await AppModelStore.model.shutdown()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
 }
 
 @MainActor
@@ -124,10 +132,7 @@ private struct MenuBarContent: View {
         Button("Settings…") { openSettings() }
         Divider()
         Button("Quit Speakerr") {
-            Task {
-                await model.shutdown()
-                await MainActor.run { NSApplication.shared.terminate(nil) }
-            }
+            NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q")
     }
