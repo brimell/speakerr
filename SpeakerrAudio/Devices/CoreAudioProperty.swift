@@ -47,12 +47,38 @@ enum CoreAudioProperty {
         return value
     }
 
+    static func dictionary(_ objectID: AudioObjectID, selector: AudioObjectPropertySelector) throws -> [String: Any] {
+        var address = AudioObjectPropertyAddress(mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var value: Unmanaged<CFDictionary>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFDictionary>?>.size)
+        try check(AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &value), "Read CoreAudio dictionary property")
+        guard let value, let dictionary = value.takeRetainedValue() as? [String: Any] else {
+            throw CoreAudioError("Read CoreAudio dictionary property", status: kAudioHardwareUnspecifiedError)
+        }
+        return dictionary
+    }
+
     static func double(_ objectID: AudioObjectID, selector: AudioObjectPropertySelector) throws -> Double {
         var address = AudioObjectPropertyAddress(mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
         var value: Double = 0
         var size = UInt32(MemoryLayout<Double>.size)
         try check(AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &value), "Read CoreAudio floating-point property")
         return value
+    }
+
+    static func setDouble(_ objectID: AudioObjectID, selector: AudioObjectPropertySelector, value: Double) throws {
+        var address = AudioObjectPropertyAddress(mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var mutableValue = value
+        try check(AudioObjectSetPropertyData(objectID, &address, 0, nil, UInt32(MemoryLayout<Double>.size), &mutableValue), "Set CoreAudio floating-point property")
+    }
+
+    static func availableNominalSampleRates(_ objectID: AudioObjectID) throws -> [AudioValueRange] {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyAvailableNominalSampleRates, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        try check(AudioObjectGetPropertyDataSize(objectID, &address, 0, nil, &size), "Read available sample-rate size")
+        var ranges = [AudioValueRange](repeating: AudioValueRange(), count: Int(size) / MemoryLayout<AudioValueRange>.size)
+        try check(AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &ranges), "Read available sample rates")
+        return ranges
     }
 
     static func channelCount(_ objectID: AudioObjectID, scope: AudioObjectPropertyScope) throws -> Int {

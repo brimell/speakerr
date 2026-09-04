@@ -10,28 +10,35 @@
 		15B8A2CBB3329A61134FA6AE /* AudioDeviceDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = B29F4025CFCFC333D13AF228 /* AudioDeviceDiscovery.swift */; };
 		171C8F0E076D688D0F63FA65 /* EQModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C1BC859501A9CBE59DE3C15 /* EQModel.swift */; };
 		210C62D7AD8854CC3B13A74A /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB7B6EB861770579C447D381 /* ContentView.swift */; };
+		21926011A10385D3CD68ADF5 /* CoreAudioAggregateRoutingBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EDD5849C6F688936EDAE7C8 /* CoreAudioAggregateRoutingBackend.swift */; };
 		26162A2DE08B7460A8CF8967 /* AudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = D83FABDFACF2ACC2CD9EA22A /* AudioDevice.swift */; };
 		2CB768C2BF7D803D224700CD /* CoreAudioProperty.swift in Sources */ = {isa = PBXBuildFile; fileRef = E68E1642F47346513B53F355 /* CoreAudioProperty.swift */; };
 		37751239FD26B9812D2949A8 /* TrayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDD433EC4DCD1D2C3D93C781 /* TrayController.swift */; };
+		3C7660C08D60711CEF6E6244 /* AggregateDeviceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2C85692911C9DC39D96E5E /* AggregateDeviceManager.swift */; };
 		4323B17208A4EFF886F2D489 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 546BC26B76E1C930ECA04CF4 /* UpdateChecker.swift */; };
 		4AC0BAFB15FA7E9DFD4F35B5 /* SpeakerrAudio.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A77BDA4EABB08BDE64B162FE /* SpeakerrAudio.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		4F553B51216C23A6695D36E9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 250EDA5950C8D3BF7F091DF1 /* Assets.xcassets */; };
 		4FF98A3C38401CD9C1704E3D /* BiquadFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C9E73298AC49BB8789CC15B /* BiquadFilter.swift */; };
 		5103136088234660945D9DBE /* LaunchAtLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2A21DE043B97BF2DC1BE3A /* LaunchAtLogin.swift */; };
 		56E711DC2278BC8CC9B7D10C /* SettingsTransfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16332FF47332BF0E7312553F /* SettingsTransfer.swift */; };
+		625973D16B8B927880EA5579 /* InteractiveDelayCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84BC3BCB47471F5D7D27A4DB /* InteractiveDelayCommand.swift */; };
 		689CD76A34468AFB1DF0DB4D /* EQSliderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FFE4ED5FE9EDA2C58B46737 /* EQSliderView.swift */; };
+		691AFC21E5B55BCA2358F848 /* FractionalDelayLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 501BF7139711E0DC1316D187 /* FractionalDelayLine.swift */; };
 		707595D7306F84C2143A6052 /* DeviceProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEF12421A6CF2B59FC1EB81A /* DeviceProfile.swift */; };
+		743BECEB540CBB94310DBF39 /* OutputChannelMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076C05AF31E42E8B9A214EDF /* OutputChannelMap.swift */; };
 		75CF7189CB4579AECD4FD9E4 /* AudioDeviceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AD4D811C3A9D024EF39C807 /* AudioDeviceManager.swift */; };
 		7E8289D86522382E31D2749E /* SpeakerrApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28AA84616A4ABF1FA0BB7379 /* SpeakerrApp.swift */; };
 		A5E7AB755C21FBE45DAFA617 /* SpeakerrAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A77BDA4EABB08BDE64B162FE /* SpeakerrAudio.framework */; };
 		A6B31BD631F392F04738E1EB /* AutoEQManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D47B14F2013EFA8EDCEC785F /* AutoEQManager.swift */; };
-		B00D74FBE7E4ACCC1063021F /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9BB2B54EF319FB3F1220EBD /* main.swift */; };
 		C2B804F283C337F966295B51 /* AppSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA0304B167FC787CD22EC4EF /* AppSettingsStore.swift */; };
 		C42AA1AD124777C22D7C6EB1 /* SpeakerrAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A77BDA4EABB08BDE64B162FE /* SpeakerrAudio.framework */; };
 		C882735CB77628443D29770D /* AutoEQView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8CAA56E2B1B4D826096FB6D /* AutoEQView.swift */; };
 		C942D5DBFDFFCB13C345A123 /* AudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0591E47F6C12D9A6FA469E80 /* AudioEngine.swift */; };
 		CA0FAE0DEBC7B3DD11474FA8 /* SpeakerrAudioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C87676BE39F43B850BEA94 /* SpeakerrAudioTests.swift */; };
+		DDD74BDD91E7880735A000E0 /* SpeakerrTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76FD022F021844B728636D7B /* SpeakerrTest.swift */; };
 		E0EC240A68C55CA11C3EDB41 /* EQPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = D74799EA4C66147BADA0EA13 /* EQPreset.swift */; };
+		EF5A31A3E44014030CB6B577 /* AudioRoutingBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52CEF2CEC673F25347D16B99 /* AudioRoutingBackend.swift */; };
+		F4F4D5A4D48D7CFB2F31CB44 /* TransientSignalGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9F54614D9BFBE2B231615D1 /* TransientSignalGenerator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,16 +74,23 @@
 
 /* Begin PBXFileReference section */
 		0591E47F6C12D9A6FA469E80 /* AudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngine.swift; sourceTree = "<group>"; };
+		076C05AF31E42E8B9A214EDF /* OutputChannelMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputChannelMap.swift; sourceTree = "<group>"; };
+		0A2C85692911C9DC39D96E5E /* AggregateDeviceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AggregateDeviceManager.swift; sourceTree = "<group>"; };
 		16332FF47332BF0E7312553F /* SettingsTransfer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTransfer.swift; sourceTree = "<group>"; };
 		19B924486601C5A00B639DF8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		1C9E73298AC49BB8789CC15B /* BiquadFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiquadFilter.swift; sourceTree = "<group>"; };
+		1EDD5849C6F688936EDAE7C8 /* CoreAudioAggregateRoutingBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreAudioAggregateRoutingBackend.swift; sourceTree = "<group>"; };
 		250EDA5950C8D3BF7F091DF1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		28AA84616A4ABF1FA0BB7379 /* SpeakerrApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerrApp.swift; sourceTree = "<group>"; };
 		35C87676BE39F43B850BEA94 /* SpeakerrAudioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerrAudioTests.swift; sourceTree = "<group>"; };
+		501BF7139711E0DC1316D187 /* FractionalDelayLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FractionalDelayLine.swift; sourceTree = "<group>"; };
+		52CEF2CEC673F25347D16B99 /* AudioRoutingBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRoutingBackend.swift; sourceTree = "<group>"; };
 		546BC26B76E1C930ECA04CF4 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		5C1BC859501A9CBE59DE3C15 /* EQModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EQModel.swift; sourceTree = "<group>"; };
 		5FFE4ED5FE9EDA2C58B46737 /* EQSliderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EQSliderView.swift; sourceTree = "<group>"; };
 		70F7AC1B2B885FB830DAD103 /* speakerr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = speakerr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		76FD022F021844B728636D7B /* SpeakerrTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerrTest.swift; sourceTree = "<group>"; };
+		84BC3BCB47471F5D7D27A4DB /* InteractiveDelayCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractiveDelayCommand.swift; sourceTree = "<group>"; };
 		92EB616F18AC034433C267EF /* speakerr-test */ = {isa = PBXFileReference; includeInIndex = 0; path = "speakerr-test"; sourceTree = BUILT_PRODUCTS_DIR; };
 		9AD4D811C3A9D024EF39C807 /* AudioDeviceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDeviceManager.swift; sourceTree = "<group>"; };
 		A537631D313AF47D1EFBF490 /* speakerr.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = speakerr.entitlements; sourceTree = "<group>"; };
@@ -84,7 +98,6 @@
 		A77BDA4EABB08BDE64B162FE /* SpeakerrAudio.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = SpeakerrAudio.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB7B6EB861770579C447D381 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		B29F4025CFCFC333D13AF228 /* AudioDeviceDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDeviceDiscovery.swift; sourceTree = "<group>"; };
-		B9BB2B54EF319FB3F1220EBD /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		CA0304B167FC787CD22EC4EF /* AppSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsStore.swift; sourceTree = "<group>"; };
 		CDD433EC4DCD1D2C3D93C781 /* TrayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrayController.swift; sourceTree = "<group>"; };
 		CF2A21DE043B97BF2DC1BE3A /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
@@ -94,6 +107,7 @@
 		D8CAA56E2B1B4D826096FB6D /* AutoEQView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoEQView.swift; sourceTree = "<group>"; };
 		DEF12421A6CF2B59FC1EB81A /* DeviceProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceProfile.swift; sourceTree = "<group>"; };
 		E68E1642F47346513B53F355 /* CoreAudioProperty.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreAudioProperty.swift; sourceTree = "<group>"; };
+		F9F54614D9BFBE2B231615D1 /* TransientSignalGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransientSignalGenerator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -163,6 +177,15 @@
 			);
 			sourceTree = "<group>";
 		};
+		9F19E2270D3AAA16526DD229 /* DSP */ = {
+			isa = PBXGroup;
+			children = (
+				501BF7139711E0DC1316D187 /* FractionalDelayLine.swift */,
+				F9F54614D9BFBE2B231615D1 /* TransientSignalGenerator.swift */,
+			);
+			path = DSP;
+			sourceTree = "<group>";
+		};
 		B60150C0A64618C037346FAC /* speakerr */ = {
 			isa = PBXGroup;
 			children = (
@@ -182,7 +205,7 @@
 		B69A83E6D78C8705ADCB8363 /* SpeakerrCLI */ = {
 			isa = PBXGroup;
 			children = (
-				B9BB2B54EF319FB3F1220EBD /* main.swift */,
+				76FD022F021844B728636D7B /* SpeakerrTest.swift */,
 			);
 			path = SpeakerrCLI;
 			sourceTree = "<group>";
@@ -199,8 +222,22 @@
 			isa = PBXGroup;
 			children = (
 				F535CDF1F3D458F638D6E541 /* Devices */,
+				9F19E2270D3AAA16526DD229 /* DSP */,
+				F142115C6CDDA920D7E3D2E8 /* Routing */,
 			);
 			path = SpeakerrAudio;
+			sourceTree = "<group>";
+		};
+		F142115C6CDDA920D7E3D2E8 /* Routing */ = {
+			isa = PBXGroup;
+			children = (
+				0A2C85692911C9DC39D96E5E /* AggregateDeviceManager.swift */,
+				52CEF2CEC673F25347D16B99 /* AudioRoutingBackend.swift */,
+				1EDD5849C6F688936EDAE7C8 /* CoreAudioAggregateRoutingBackend.swift */,
+				84BC3BCB47471F5D7D27A4DB /* InteractiveDelayCommand.swift */,
+				076C05AF31E42E8B9A214EDF /* OutputChannelMap.swift */,
+			);
+			path = Routing;
 			sourceTree = "<group>";
 		};
 		F535CDF1F3D458F638D6E541 /* Devices */ = {
@@ -348,7 +385,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B00D74FBE7E4ACCC1063021F /* main.swift in Sources */,
+				DDD74BDD91E7880735A000E0 /* SpeakerrTest.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -356,9 +393,16 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3C7660C08D60711CEF6E6244 /* AggregateDeviceManager.swift in Sources */,
 				26162A2DE08B7460A8CF8967 /* AudioDevice.swift in Sources */,
 				15B8A2CBB3329A61134FA6AE /* AudioDeviceDiscovery.swift in Sources */,
+				EF5A31A3E44014030CB6B577 /* AudioRoutingBackend.swift in Sources */,
+				21926011A10385D3CD68ADF5 /* CoreAudioAggregateRoutingBackend.swift in Sources */,
 				2CB768C2BF7D803D224700CD /* CoreAudioProperty.swift in Sources */,
+				691AFC21E5B55BCA2358F848 /* FractionalDelayLine.swift in Sources */,
+				625973D16B8B927880EA5579 /* InteractiveDelayCommand.swift in Sources */,
+				743BECEB540CBB94310DBF39 /* OutputChannelMap.swift in Sources */,
+				F4F4D5A4D48D7CFB2F31CB44 /* TransientSignalGenerator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
