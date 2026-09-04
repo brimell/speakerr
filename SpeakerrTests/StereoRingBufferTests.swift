@@ -38,6 +38,15 @@ final class StereoRingBufferTests: XCTestCase {
         XCTAssertEqual(ring.availableFrames, 0)
     }
 
+    func testSampleRateConversionPlan() {
+        let unchanged = SampleRateConversionPlan(captureRate: 44_100, renderRate: 44_100)
+        XCTAssertFalse(unchanged.requiresConversion)
+        XCTAssertEqual(unchanged.ratio, 1)
+        let converted = SampleRateConversionPlan(captureRate: 48_000, renderRate: 44_100)
+        XCTAssertTrue(converted.requiresConversion)
+        XCTAssertEqual(converted.ratio, 0.91875, accuracy: 0.000_001)
+    }
+
     @discardableResult
     private func write(_ left: [Float], _ right: [Float], to ring: StereoRingBuffer) -> Int {
         left.withUnsafeBufferPointer { l in right.withUnsafeBufferPointer { r in ring.write(left: l.baseAddress!, right: r.baseAddress!, frameCount: left.count) } }
