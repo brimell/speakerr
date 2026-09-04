@@ -37,6 +37,8 @@ struct SpeakerrTest {
                 try await play(arguments: Array(arguments.dropFirst()))
             case "calibrate":
                 try await calibrate(arguments: Array(arguments.dropFirst()))
+            case "system-audio":
+                try await systemAudio(arguments: Array(arguments.dropFirst()))
             default:
                 printUsage()
                 if !arguments.isEmpty { exit(EXIT_FAILURE) }
@@ -56,6 +58,8 @@ struct SpeakerrTest {
                                  [--gain <0.01...0.5>] [--verbose]
                                  [--stability]
                                  [--save-diagnostics <directory>]
+          speakerr-test system-audio [--output-a <uid>] [--output-b <uid>] [--input <uid>]
+                                 [--system-input <uid>] [--gain <0.01...0.5>]
         """)
     }
 
@@ -367,6 +371,235 @@ struct SpeakerrTest {
             index += 2
         }
         return (outputA, outputB)
+    }
+
+    private struct SystemAudioOptions {
+        var outputA: String?
+        var outputB: String?
+        var micInput: String?
+        var systemInput: String?
+        var gain = 0.12
+    }
+
+    private static func systemAudio(arguments: [String]) async throws {
+        let options = try parseSystemAudioOptions(arguments)
+        let discovery = AudioDeviceDiscovery()
+        let outputs = try discovery.outputDevices().filter { !$0.isAggregate }
+        let inputs = try discovery.inputDevices()
+        guard outputs.count >= 2 else { throw AudioRoutingError.requiresExactlyTwoOutputs }
+
+        print("Available non-aggregate outputs:")
+        for (index, output) in outputs.enumerated() {
+            print("[\(index)] \(output.name) — \(output.transport.rawValue), \(output.channelCount)ch, \(output.sampleRate)Hz")
+        }
+        let outputA = try selectOutput(label: "A", uid: options.outputA, outputs: outputs)
+        let outputB = try selectOutput(label: "B", uid: options.outputB, outputs: outputs)
+        guard outputA.id != outputB.id else { throw AudioRoutingError.duplicateOutput }
+
+        print("\nAvailable microphones / inputs (used only for calibration/recheck):")
+        for (index, input) in inputs.enumerated() {
+            print("[\(index)] \(input.name) — \(input.transport.rawValue), \(input.channelCount)ch, \(input.sampleRate)Hz")
+        }
+        let microphone = try selectInput(uid: options.micInput, inputs: inputs)
+        guard await requestMicrophoneAccess() else {
+            throw CalibrationSessionError.inputUnavailable("\(microphone.name) (microphone permission denied)")
+        }
+
+        print("\nAvailable system-audio capture inputs (for example BlackHole 2ch):")
+        for (index, input) in inputs.enumerated() {
+            print("[\(index)] \(input.name) — \(input.transport.rawValue), \(input.channelCount)ch, \(input.sampleRate)Hz")
+        }
+        let systemInput = try selectInput(uid: options.systemInput, inputs: inputs)
+
+        let session = try PersistentSpeakerSession(outputs: [outputA, outputB])
+        try session.start(calibrationLevel: options.gain)
+        try session.startLifecycleMonitoring()
+
+        print("""
+
+        Output A: \(outputA.name)
+        Output B: \(outputB.name)
+        Sample rate: \(Int(session.sampleRate)) Hz
+
+        Calibrating (both outputs will briefly emit a chirp)...
+        """)
+
+        var configuration = CalibrationExperimentConfiguration()
+        configuration.level = options.gain
+        do {
+            let passes = try await session.performCalibration(input: microphone, configuration: configuration)
+            if let last = passes.last {
+                print("Calibration successful. Residual \(String(format: "%+.2f", last.relativeArrivalBMinusAMilliseconds)) ms")
+            }
+        } catch {
+            fputs("Calibration failed: \(error.localizedDescription). System audio can still play, but timing may be unaligned.\n", stderr)
+        }
+
+        let conversion = try session.attachProgrammeInput(systemInput)
+
+        print("""
+
+        System-audio input: \(systemInput.name)
+        Capture rate: \(Int(conversion.captureRate)) Hz, render rate: \(Int(conversion.renderRate)) Hz\(conversion.requiresConversion ? " (resampled by the input AUHAL)" : "")
+
+        If you want ordinary macOS applications (Spotify, browser, Music, VLC) to
+        reach these speakers, set \"\(systemInput.name)\" as the system output device
+        in System Settings > Sound, or route it there with a multi-output/aggregate
+        device in Audio MIDI Setup. Speakerr only captures from it; it does not
+        change the system output route for you.
+
+        Commands:
+          status                 show current state, delays, and calibration
+          recheck                pause programme audio, measure residual, resume (no correction)
+          correct                apply the last recheck residual as a dynamic correction
+          calibrate              re-run full acoustic calibration
+          a|b +0.1, -0.1, +10, -10, or an absolute number of milliseconds
+          quit
+        """)
+
+        var lastRecheckResidual: Double?
+        signal(SIGINT, SIG_IGN)
+        let signalSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .global())
+        signalSource.setEventHandler {
+            session.stop()
+            fputs("\nStopped.\n", stderr)
+            exit(EXIT_SUCCESS)
+        }
+        signalSource.resume()
+
+        printSessionStatus(session)
+
+        while let line = readLine(strippingNewline: true) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            switch trimmed {
+            case "quit", "q":
+                session.stop()
+                signalSource.cancel()
+                print("Stopped.")
+                return
+            case "status":
+                printSessionStatus(session)
+            case "help":
+                print("Commands: status, recheck, correct, calibrate, a|b +0.1|-0.1|+10|-10|<absolute ms>, quit")
+            case "recheck":
+                do {
+                    let measurement = try await session.recheck(input: microphone)
+                    let residual = measurement.relativeArrivalBMinusAMilliseconds
+                    lastRecheckResidual = residual
+                    print("\nCurrent acoustic residual: \(String(format: "%+.2f", residual)) ms")
+                    let early = residual >= 0 ? outputB.name : outputA.name
+                    print("\(early) is early by \(String(format: "%.2f", abs(residual))) ms.")
+                    print("No correction applied.")
+                } catch {
+                    fputs("recheck failed: \(error.localizedDescription)\n", stderr)
+                }
+            case "correct":
+                guard let residual = lastRecheckResidual else {
+                    print("Run 'recheck' first.")
+                    continue
+                }
+                do {
+                    try session.applyDynamicCorrection(relativeResidualBMinusA: residual)
+                    let corrected = residual >= 0 ? outputA.name : outputB.name
+                    print("Applied +\(String(format: "%.2f", abs(residual))) ms dynamic correction to \(corrected).")
+                    lastRecheckResidual = nil
+                    printSessionStatus(session)
+                } catch {
+                    fputs("correct failed: \(error.localizedDescription)\n", stderr)
+                }
+            case "calibrate":
+                do {
+                    let passes = try await session.performCalibration(input: microphone, configuration: configuration)
+                    if let last = passes.last {
+                        print("Calibration successful. Residual \(String(format: "%+.2f", last.relativeArrivalBMinusAMilliseconds)) ms")
+                    }
+                } catch {
+                    fputs("Calibration failed: \(error.localizedDescription)\n", stderr)
+                }
+            default:
+                if let command = InteractiveDelayCommand.parse(trimmed) {
+                    do {
+                        switch command {
+                        case .adjust(let device, let delta):
+                            try adjustManualDelay(session: session, device: device, delta: delta)
+                            printSessionStatus(session)
+                        case .set(let device, let milliseconds):
+                            try setManualDelay(session: session, device: device, milliseconds: milliseconds)
+                            printSessionStatus(session)
+                        case .status:
+                            printSessionStatus(session)
+                        case .help:
+                            print("Examples: 'a +10', 'b -0.1', 'a 73.4', 'status', 'quit'")
+                        case .quit:
+                            session.stop()
+                            signalSource.cancel()
+                            print("Stopped.")
+                            return
+                        }
+                    } catch {
+                        fputs("\(error.localizedDescription)\n", stderr)
+                    }
+                } else {
+                    print("Unrecognised command. Enter 'help' for examples.")
+                }
+            }
+        }
+        session.stop()
+        signalSource.cancel()
+    }
+
+    private static func adjustManualDelay(session: PersistentSpeakerSession, device: Character, delta: Double) throws {
+        let index = device == "a" ? 0 : 1
+        let current = session.status().delays[index]
+        let newManual = max(0, min(FractionalDelayLine.maximumDelayMilliseconds, current.manual + delta))
+        try session.setDelayComponents(index: index, value: try DelayComponents(manual: newManual, calibration: current.calibration, dynamicCorrection: current.dynamicCorrection))
+    }
+
+    private static func setManualDelay(session: PersistentSpeakerSession, device: Character, milliseconds: Double) throws {
+        let index = device == "a" ? 0 : 1
+        let current = session.status().delays[index]
+        try session.setDelayComponents(index: index, value: try DelayComponents(manual: milliseconds, calibration: current.calibration, dynamicCorrection: current.dynamicCorrection))
+    }
+
+    private static func printSessionStatus(_ session: PersistentSpeakerSession) {
+        let status = session.status()
+        print("\nState: \(status.state)")
+        let labels = ["A", "B"]
+        for (index, delay) in status.delays.enumerated() {
+            print("\(labels[index]): manual=\(String(format: "%.2f", delay.manual)) calibration=\(String(format: "%.2f", delay.calibration)) dynamic=\(String(format: "%.2f", delay.dynamicCorrection)) effective=\(String(format: "%.2f", delay.effectiveMilliseconds)) ms")
+        }
+        if let calibration = status.calibration {
+            print("Calibration: valid, residual=\(String(format: "%.2f", calibration.residualMilliseconds)) ms confidence=\(String(format: "%.2f", calibration.confidence))")
+        } else {
+            print("Calibration: stale/none")
+        }
+        let transport = status.transport
+        print("Transport — captured=\(transport.capturedFrames) rendered=\(transport.renderedFrames) underflows=\(transport.underflowCallbacks) overflows=\(transport.overflowCallbacks) dropped=\(transport.droppedFrames)")
+        print("Render callbacks: \(status.renderCallbacks)")
+        if let error = status.renderError { print("Render error: \(error)") }
+    }
+
+    private static func parseSystemAudioOptions(_ arguments: [String]) throws -> SystemAudioOptions {
+        var result = SystemAudioOptions()
+        var index = 0
+        while index < arguments.count {
+            let option = arguments[index]
+            guard ["--output-a", "--output-b", "--input", "--system-input", "--gain"].contains(option) else { throw CLIError.unknownOption(option) }
+            guard arguments.indices.contains(index + 1) else { throw CLIError.missingOptionValue(option) }
+            let value = arguments[index + 1]
+            switch option {
+            case "--output-a": result.outputA = value
+            case "--output-b": result.outputB = value
+            case "--input": result.micInput = value
+            case "--system-input": result.systemInput = value
+            case "--gain":
+                guard let gain = Double(value) else { throw CLIError.invalidNumber(option: option, value: value) }
+                result.gain = gain
+            default: break
+            }
+            index += 2
+        }
+        return result
     }
 
     private static func parseCalibrationOptions(_ arguments: [String]) throws -> CalibrationOptions {
