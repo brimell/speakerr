@@ -1,6 +1,6 @@
 # speakerr
 
-A free, open-source macOS system-wide 10-band parametric equalizer.
+A free, open-source macOS system-wide 10-band parametric equalizer, now including an early native multi-speaker synchronisation prototype.
 
 speakerr sits in your menu bar and applies real-time EQ processing to all system audio, letting you fine-tune your listening experience across any app.
 
@@ -49,8 +49,24 @@ Main Menu:
 
 ## Requirements
 
-- macOS 13.0 (Ventura) or later
-- [BlackHole 2ch](https://github.com/ExistentialAudio/BlackHole) virtual audio driver
+- macOS 15.0 or later on Apple Silicon
+- Xcode 16 or later
+- [BlackHole 2ch](https://github.com/ExistentialAudio/BlackHole) virtual audio driver for the existing system-wide EQ path
+
+## Multi-speaker prototype
+
+Phases 0 and 1 provide a `speakerr-test` command-line diagnostic. It enumerates CoreAudio outputs and microphones, automatically creates a temporary two-device aggregate output, enables drift compensation, and plays a repeating transient with independent fractional delay for each speaker.
+
+The CLI path does not require BlackHole or CamillaDSP. Build and run it with:
+
+```bash
+xcodegen generate
+xcodebuild -project speakerr.xcodeproj -scheme speakerr-test -configuration Debug -derivedDataPath /tmp/speakerr-build build
+/tmp/speakerr-build/Build/Products/Debug/speakerr-test devices
+/tmp/speakerr-build/Build/Products/Debug/speakerr-test play
+```
+
+See [Phase 0–1 prototype](docs/PHASE_0_1.md) for architecture, controls, limitations, tests, and the two-speaker reproduction procedure.
 
 ## Installation
 
