@@ -17,6 +17,7 @@ targets:
         PRODUCT_NAME: SpeakerrAudio
         MACOSX_DEPLOYMENT_TARGET: "15.0"
         SWIFT_VERSION: "6.0"
+        MACH_O_TYPE: staticlib
         CODE_SIGNING_ALLOWED: NO
 
   speakerr-test:

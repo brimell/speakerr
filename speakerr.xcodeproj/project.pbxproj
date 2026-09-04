@@ -7,8 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		15B8A2CBB3329A61134FA6AE /* AudioDeviceDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = B29F4025CFCFC333D13AF228 /* AudioDeviceDiscovery.swift */; };
 		171C8F0E076D688D0F63FA65 /* EQModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C1BC859501A9CBE59DE3C15 /* EQModel.swift */; };
 		210C62D7AD8854CC3B13A74A /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB7B6EB861770579C447D381 /* ContentView.swift */; };
+		26162A2DE08B7460A8CF8967 /* AudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = D83FABDFACF2ACC2CD9EA22A /* AudioDevice.swift */; };
+		2CB768C2BF7D803D224700CD /* CoreAudioProperty.swift in Sources */ = {isa = PBXBuildFile; fileRef = E68E1642F47346513B53F355 /* CoreAudioProperty.swift */; };
 		37751239FD26B9812D2949A8 /* TrayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDD433EC4DCD1D2C3D93C781 /* TrayController.swift */; };
 		4323B17208A4EFF886F2D489 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 546BC26B76E1C930ECA04CF4 /* UpdateChecker.swift */; };
 		4AC0BAFB15FA7E9DFD4F35B5 /* SpeakerrAudio.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A77BDA4EABB08BDE64B162FE /* SpeakerrAudio.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -19,7 +22,6 @@
 		689CD76A34468AFB1DF0DB4D /* EQSliderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FFE4ED5FE9EDA2C58B46737 /* EQSliderView.swift */; };
 		707595D7306F84C2143A6052 /* DeviceProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEF12421A6CF2B59FC1EB81A /* DeviceProfile.swift */; };
 		75CF7189CB4579AECD4FD9E4 /* AudioDeviceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AD4D811C3A9D024EF39C807 /* AudioDeviceManager.swift */; };
-		7D86A9D21EC7925960FFDE71 /* SpeakerrAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEFC0DAB40F8753C50B6C68C /* SpeakerrAudio.swift */; };
 		7E8289D86522382E31D2749E /* SpeakerrApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28AA84616A4ABF1FA0BB7379 /* SpeakerrApp.swift */; };
 		A5E7AB755C21FBE45DAFA617 /* SpeakerrAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A77BDA4EABB08BDE64B162FE /* SpeakerrAudio.framework */; };
 		A6B31BD631F392F04738E1EB /* AutoEQManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D47B14F2013EFA8EDCEC785F /* AutoEQManager.swift */; };
@@ -81,15 +83,17 @@
 		A5C5B57543952E0AEEE32150 /* SpeakerrAudioTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SpeakerrAudioTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A77BDA4EABB08BDE64B162FE /* SpeakerrAudio.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = SpeakerrAudio.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB7B6EB861770579C447D381 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		B29F4025CFCFC333D13AF228 /* AudioDeviceDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDeviceDiscovery.swift; sourceTree = "<group>"; };
 		B9BB2B54EF319FB3F1220EBD /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		CA0304B167FC787CD22EC4EF /* AppSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsStore.swift; sourceTree = "<group>"; };
 		CDD433EC4DCD1D2C3D93C781 /* TrayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrayController.swift; sourceTree = "<group>"; };
 		CF2A21DE043B97BF2DC1BE3A /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
 		D47B14F2013EFA8EDCEC785F /* AutoEQManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoEQManager.swift; sourceTree = "<group>"; };
 		D74799EA4C66147BADA0EA13 /* EQPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EQPreset.swift; sourceTree = "<group>"; };
+		D83FABDFACF2ACC2CD9EA22A /* AudioDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDevice.swift; sourceTree = "<group>"; };
 		D8CAA56E2B1B4D826096FB6D /* AutoEQView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoEQView.swift; sourceTree = "<group>"; };
 		DEF12421A6CF2B59FC1EB81A /* DeviceProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceProfile.swift; sourceTree = "<group>"; };
-		DEFC0DAB40F8753C50B6C68C /* SpeakerrAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerrAudio.swift; sourceTree = "<group>"; };
+		E68E1642F47346513B53F355 /* CoreAudioProperty.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreAudioProperty.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -194,9 +198,19 @@
 		BFE1615EB83DE4C2AC24DABA /* SpeakerrAudio */ = {
 			isa = PBXGroup;
 			children = (
-				DEFC0DAB40F8753C50B6C68C /* SpeakerrAudio.swift */,
+				F535CDF1F3D458F638D6E541 /* Devices */,
 			);
 			path = SpeakerrAudio;
+			sourceTree = "<group>";
+		};
+		F535CDF1F3D458F638D6E541 /* Devices */ = {
+			isa = PBXGroup;
+			children = (
+				D83FABDFACF2ACC2CD9EA22A /* AudioDevice.swift */,
+				B29F4025CFCFC333D13AF228 /* AudioDeviceDiscovery.swift */,
+				E68E1642F47346513B53F355 /* CoreAudioProperty.swift */,
+			);
+			path = Devices;
 			sourceTree = "<group>";
 		};
 		F656D801271EA85A81D2D195 /* Audio */ = {
@@ -342,7 +356,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7D86A9D21EC7925960FFDE71 /* SpeakerrAudio.swift in Sources */,
+				26162A2DE08B7460A8CF8967 /* AudioDevice.swift in Sources */,
+				15B8A2CBB3329A61134FA6AE /* AudioDeviceDiscovery.swift in Sources */,
+				2CB768C2BF7D803D224700CD /* CoreAudioProperty.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -621,6 +637,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACH_O_TYPE = staticlib;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.brimell.speakerr.audio;
 				PRODUCT_NAME = SpeakerrAudio;
@@ -668,6 +685,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACH_O_TYPE = staticlib;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.brimell.speakerr.audio;
 				PRODUCT_NAME = SpeakerrAudio;
