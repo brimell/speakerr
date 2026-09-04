@@ -32,6 +32,7 @@ public protocol SpeakerSessionControlling: Sendable {
     func setMasterEQBypass(_ bypass: Bool) async
     func setRouteEQBands(route: Int, bands: [EQBand]) async
     func setRouteEQBypass(route: Int, bypass: Bool) async
+    func setRouteVolume(route: Int, volume: Float) async
 }
 
 public enum SessionControllerError: LocalizedError, Sendable, Equatable {
@@ -63,6 +64,7 @@ public actor CoreAudioSpeakerSessionController: SpeakerSessionControlling {
     private var masterEQBypass: Bool = false
     private var routeEQBands: [Int: [EQBand]] = [:]
     private var routeEQBypass: [Int: Bool] = [:]
+    private var routeVolumes: [Int: Float] = [:]
 
     public init() {}
 
@@ -92,6 +94,7 @@ public actor CoreAudioSpeakerSessionController: SpeakerSessionControlling {
         created.setMasterEQBypass(masterEQBypass)
         for (route, bands) in routeEQBands { created.setRouteEQBands(route: route, bands: bands) }
         for (route, bypass) in routeEQBypass { created.setRouteEQBypass(route: route, bypass: bypass) }
+        for (route, volume) in routeVolumes { created.setRouteVolume(route: route, volume: volume) }
 
         do {
             try created.start(calibrationLevel: calibrationLevel)
@@ -163,6 +166,12 @@ public actor CoreAudioSpeakerSessionController: SpeakerSessionControlling {
     public func setRouteEQBypass(route: Int, bypass: Bool) {
         routeEQBypass[route] = bypass
         session?.setRouteEQBypass(route: route, bypass: bypass)
+    }
+
+    public func setRouteVolume(route: Int, volume: Float) {
+        let clamped = max(0, min(1, volume))
+        routeVolumes[route] = clamped
+        session?.setRouteVolume(route: route, volume: clamped)
     }
 
     private func resolveInput(uid: String) throws -> InputDevice {

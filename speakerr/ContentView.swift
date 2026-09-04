@@ -24,6 +24,7 @@ struct ContentView: View {
 
     @State private var selectedInputID: AudioDeviceID?
     @State private var selectedOutputDeviceUIDs: [String] = []
+    @State private var outputVolumes: [String: Float] = [:]
     @State private var selectedEQTargetUID: String = "master"
     @State private var shortcutOutputDeviceUIDs: [String] = []
     @State private var showingSavePreset = false
@@ -208,7 +209,9 @@ struct ContentView: View {
             eqSliders
             preGainControl
             if audioEngine.outputDeviceNeedsVolumeControl {
-                volumeControl
+                if selectedOutputDevices.count < 2 {
+                    volumeControl
+                }
             }
             compactOutputControl
             footer
@@ -242,7 +245,9 @@ struct ContentView: View {
 
             // Volume slider for HDMI/devices without hardware volume
             if audioEngine.outputDeviceNeedsVolumeControl {
-                volumeControl
+                if selectedOutputDevices.count < 2 {
+                    volumeControl
+                }
             }
 
             if isCompactLayout {
@@ -332,6 +337,11 @@ struct ContentView: View {
                     }
                 }
 
+                ForEach(selectedOutputDevices.indices, id: \.self) { idx in
+                    let device = selectedOutputDevices[idx]
+                    outputVolumeControl(for: device, route: idx)
+                }
+
                 if selectedOutputDevices.count == 1 {
                     Text("Tip: Select a 2nd speaker to enable dual-speaker acoustic alignment.")
                         .font(.caption2)
@@ -341,9 +351,38 @@ struct ContentView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
+
             }
             .padding(.leading, 54)
         }
+    }
+
+    private func outputVolumeControl(for device: AudioDevice, route: Int) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Image(systemName: "speaker.wave.2.fill")
+                    .foregroundColor(route == 0 && selectedOutputDevices.count > 1 ? .blue : (route == 1 ? .green : .accentColor))
+                    .font(.caption)
+                Text(device.name)
+                    .font(.caption)
+                    .lineLimit(1)
+                Spacer()
+                Text("\(Int(outputVolume(for: device) * 100))%")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .monospacedDigit()
+            }
+            Slider(
+                value: Binding(
+                    get: { Double(outputVolume(for: device)) },
+                    set: { setOutputVolume(Float($0), for: device, route: route) }
+                ),
+                in: 0...1
+            )
+            .controlSize(.small)
+            .help("Set the volume for \(device.name)")
+        }
+        .padding(.leading, 12)
     }
 
     private var multiSpeakerOutputMenu: some View {
@@ -1809,6 +1848,7 @@ struct ContentView: View {
 
     private func applyOutputDevicesSelection() {
         persistSelectedDevices()
+        syncOutputVolumes()
 
         if selectedOutputDeviceUIDs.count == 1 {
             SpeakerrStore.model.pause()
@@ -1822,6 +1862,7 @@ struct ContentView: View {
                     audioEngine.start()
                 }
             }
+
         } else if selectedOutputDeviceUIDs.count == 2 {
             audioEngine.stop()
 
@@ -1843,6 +1884,36 @@ struct ContentView: View {
             audioEngine.stop()
             SpeakerrStore.model.pause()
             selectedEQTargetUID = "master"
+        }
+    }
+
+    private func outputVolume(for device: AudioDevice) -> Float {
+        outputVolumes[device.uid] ?? DeviceProfileManager.shared.profile(for: device.uid)?.volume ?? 1.0
+    }
+
+    private func setOutputVolume(_ volume: Float, for device: AudioDevice, route: Int) {
+        let clamped = min(max(volume, 0), 1)
+        outputVolumes[device.uid] = clamped
+        if selectedOutputDevices.count == 2 {
+            SpeakerrStore.model.updateRouteVolume(route: route, volume: clamped)
+        } else {
+            eqModel.setVolume(clamped)
+        }
+        if var profile = DeviceProfileManager.shared.profile(for: device.uid) {
+            profile.volume = clamped
+            DeviceProfileManager.shared.saveProfile(profile)
+        }
+    }
+
+    private func syncOutputVolumes() {
+        outputVolumes = Dictionary(
+            uniqueKeysWithValues: selectedOutputDevices.map { device in
+                (device.uid, DeviceProfileManager.shared.profile(for: device.uid)?.volume ?? 1.0)
+            }
+        )
+        guard selectedOutputDevices.count == 2 else { return }
+        for (route, device) in selectedOutputDevices.enumerated() {
+            SpeakerrStore.model.updateRouteVolume(route: route, volume: outputVolume(for: device))
         }
     }
 

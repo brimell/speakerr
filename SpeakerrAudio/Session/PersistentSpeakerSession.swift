@@ -26,7 +26,8 @@ private final class PersistentRenderState: @unchecked Sendable {
     private let assignments: [OutputChannelAssignment]
     private let masterEQ: ParametricEQ
     private let routeEQs: [ParametricEQ]
-    private let routeVolumeBits: [Atomic<UInt32>]
+    private let routeVolume0 = Atomic<UInt32>(Float(1.0).bitPattern)
+    private let routeVolume1 = Atomic<UInt32>(Float(1.0).bitPattern)
     private let mode = Atomic<UInt32>(PersistentRenderMode.muted.rawValue)
     private let sourceLeft: UnsafeMutablePointer<Float>
     private let sourceRight: UnsafeMutablePointer<Float>
@@ -52,7 +53,6 @@ private final class PersistentRenderState: @unchecked Sendable {
         assignments = OutputChannelMap.assignments(channelCounts: channelCounts)
         masterEQ = ParametricEQ(sampleRate: sampleRate)
         routeEQs = channelCounts.map { _ in ParametricEQ(sampleRate: sampleRate) }
-        routeVolumeBits = channelCounts.map { _ in Atomic<UInt32>(1.0.bitPattern) }
         let capacity = Int(Self.maximumFrames)
         sourceLeft = .allocate(capacity: capacity)
         sourceRight = .allocate(capacity: capacity)
@@ -92,8 +92,12 @@ private final class PersistentRenderState: @unchecked Sendable {
     }
 
     func setRouteVolume(route: Int, volume: Float) {
-        guard routeVolumeBits.indices.contains(route) else { return }
-        routeVolumeBits[route].store(max(0, min(1, volume)).bitPattern, ordering: .relaxed)
+        let bits = max(0, min(1, volume)).bitPattern
+        switch route {
+        case 0: routeVolume0.store(bits, ordering: .relaxed)
+        case 1: routeVolume1.store(bits, ordering: .relaxed)
+        default: break
+        }
     }
 
     func requestEmission(speaker: Int) -> UInt64 {
@@ -150,7 +154,10 @@ private final class PersistentRenderState: @unchecked Sendable {
             } else if currentMode == .programme {
                 routeEQs[route].process(buffer: routeLeft[route], frameCount: count, channel: 0)
                 routeEQs[route].process(buffer: routeRight[route], frameCount: count, channel: 1)
-                let volume = Float(bitPattern: routeVolumeBits[route].load(ordering: .relaxed))
+                let volumeBits = route == 0
+                    ? routeVolume0.load(ordering: .relaxed)
+                    : routeVolume1.load(ordering: .relaxed)
+                let volume = Float(bitPattern: volumeBits)
                 if volume < 1 {
                     for frame in 0..<count {
                         routeLeft[route][frame] *= volume

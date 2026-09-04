@@ -38,6 +38,7 @@ private actor MockSpeakerSessionController: SpeakerSessionControlling {
     func setMasterEQBypass(_ bypass: Bool) {}
     func setRouteEQBands(route: Int, bands: [EQBand]) {}
     func setRouteEQBypass(route: Int, bypass: Bool) {}
+    func setRouteVolume(route: Int, volume: Float) {}
 }
 
 @MainActor

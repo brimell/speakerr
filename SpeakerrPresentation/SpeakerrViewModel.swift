@@ -279,6 +279,10 @@ public final class SpeakerrViewModel {
         Task { await controller.setRouteEQBypass(route: route, bypass: bypass) }
     }
 
+    public func updateRouteVolume(route: Int, volume: Float) {
+        Task { await controller.setRouteVolume(route: route, volume: volume) }
+    }
+
     public func shutdown() async {
         pollingTask?.cancel()
         calibrationTask?.cancel()

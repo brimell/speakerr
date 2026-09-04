@@ -17,6 +17,7 @@ private actor PreviewSessionController: SpeakerSessionControlling {
     func setMasterEQBypass(_ bypass: Bool) async {}
     func setRouteEQBands(route: Int, bands: [EQBand]) async {}
     func setRouteEQBypass(route: Int, bypass: Bool) async {}
+    func setRouteVolume(route: Int, volume: Float) async {}
 }
 
 @MainActor
