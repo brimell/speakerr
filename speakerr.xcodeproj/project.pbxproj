@@ -36,6 +36,7 @@
 		75CF7189CB4579AECD4FD9E4 /* AudioDeviceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AD4D811C3A9D024EF39C807 /* AudioDeviceManager.swift */; };
 		7E8289D86522382E31D2749E /* SpeakerrApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28AA84616A4ABF1FA0BB7379 /* SpeakerrApp.swift */; };
 		80C666E8F3097CC6071D63D5 /* AcousticCalibrationSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20119903E936255D09B60A9 /* AcousticCalibrationSession.swift */; };
+		8F5CF7557BD3BDE09855A699 /* CalibrationDiagnosticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E25367C52708744B9298A5 /* CalibrationDiagnosticsTests.swift */; };
 		9925192EB8A00AE1B83B7F88 /* CalibrationMathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 011CC32FCF056B0F028F9C55 /* CalibrationMathTests.swift */; };
 		A5E7AB755C21FBE45DAFA617 /* SpeakerrAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A77BDA4EABB08BDE64B162FE /* SpeakerrAudio.framework */; };
 		A6B31BD631F392F04738E1EB /* AutoEQManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D47B14F2013EFA8EDCEC785F /* AutoEQManager.swift */; };
@@ -108,6 +109,7 @@
 		74A6F983D16DA72B9DF0DF12 /* FFT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFT.swift; sourceTree = "<group>"; };
 		759BDEA51ECB53FE7AA3644A /* CalibrationSignalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationSignalTests.swift; sourceTree = "<group>"; };
 		76FD022F021844B728636D7B /* SpeakerrTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerrTest.swift; sourceTree = "<group>"; };
+		81E25367C52708744B9298A5 /* CalibrationDiagnosticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationDiagnosticsTests.swift; sourceTree = "<group>"; };
 		84BC3BCB47471F5D7D27A4DB /* InteractiveDelayCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractiveDelayCommand.swift; sourceTree = "<group>"; };
 		92EB616F18AC034433C267EF /* speakerr-test */ = {isa = PBXFileReference; includeInIndex = 0; path = "speakerr-test"; sourceTree = BUILT_PRODUCTS_DIR; };
 		99564CD41CA243CC751410E2 /* DelayEstimatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DelayEstimatorTests.swift; sourceTree = "<group>"; };
@@ -245,6 +247,7 @@
 		B6E8C9FF8B3835C0D33E93CB /* SpeakerrTests */ = {
 			isa = PBXGroup;
 			children = (
+				81E25367C52708744B9298A5 /* CalibrationDiagnosticsTests.swift */,
 				011CC32FCF056B0F028F9C55 /* CalibrationMathTests.swift */,
 				759BDEA51ECB53FE7AA3644A /* CalibrationSignalTests.swift */,
 				9DDB145AB364C23422B365ED /* CalibrationTimingTests.swift */,
@@ -470,6 +473,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8F5CF7557BD3BDE09855A699 /* CalibrationDiagnosticsTests.swift in Sources */,
 				9925192EB8A00AE1B83B7F88 /* CalibrationMathTests.swift in Sources */,
 				1F58B6D31FADB7A43EEE1C1C /* CalibrationSignalTests.swift in Sources */,
 				D54D0E08361C880BACDC7A76 /* CalibrationTimingTests.swift in Sources */,
