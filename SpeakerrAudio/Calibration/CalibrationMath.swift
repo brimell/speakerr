@@ -36,6 +36,11 @@ public struct DelayCompensation: Sendable, Equatable, Codable {
     public let calibrationDelayA: Double
     public let calibrationDelayB: Double
 
+    public init(calibrationDelayA: Double, calibrationDelayB: Double) {
+        self.calibrationDelayA = calibrationDelayA
+        self.calibrationDelayB = calibrationDelayB
+    }
+
     public static func calculate(relativeArrivalBMinusA: Double, maximumDelay: Double = FractionalDelayLine.maximumDelayMilliseconds) throws -> DelayCompensation {
         let result: DelayCompensation
         if relativeArrivalBMinusA >= 0 {

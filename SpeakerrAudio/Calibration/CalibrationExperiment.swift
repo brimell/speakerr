@@ -1,0 +1,123 @@
+import Foundation
+
+public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
+    public var preRollSeconds: Double
+    public var chirpDurationSeconds: Double
+    public var intervalSeconds: Double
+    public var passGapSeconds: Double
+    public var postRollSeconds: Double
+    public var measurementsPerSpeaker: Int
+    public var maximumPasses: Int
+    public var maximumRetriesPerSpeaker: Int
+    public var maximumAcousticLatencySeconds: Double
+    public var targetResidualMilliseconds: Double
+    public var level: Double
+
+    public init(
+        preRollSeconds: Double = 0.8,
+        chirpDurationSeconds: Double = 0.3,
+        intervalSeconds: Double = 1.35,
+        passGapSeconds: Double = 2.0,
+        postRollSeconds: Double = 0.9,
+        measurementsPerSpeaker: Int = 3,
+        maximumPasses: Int = 3,
+        maximumRetriesPerSpeaker: Int = 2,
+        maximumAcousticLatencySeconds: Double = 0.8,
+        targetResidualMilliseconds: Double = 2,
+        level: Double = 0.12
+    ) {
+        self.preRollSeconds = preRollSeconds
+        self.chirpDurationSeconds = chirpDurationSeconds
+        self.intervalSeconds = intervalSeconds
+        self.passGapSeconds = passGapSeconds
+        self.postRollSeconds = postRollSeconds
+        self.measurementsPerSpeaker = measurementsPerSpeaker
+        self.maximumPasses = maximumPasses
+        self.maximumRetriesPerSpeaker = maximumRetriesPerSpeaker
+        self.maximumAcousticLatencySeconds = maximumAcousticLatencySeconds
+        self.targetResidualMilliseconds = targetResidualMilliseconds
+        self.level = level
+    }
+
+    public func validate() throws {
+        guard preRollSeconds >= 0,
+              chirpDurationSeconds > 0,
+              intervalSeconds > chirpDurationSeconds + maximumAcousticLatencySeconds,
+              passGapSeconds >= 0,
+              postRollSeconds >= maximumAcousticLatencySeconds,
+              measurementsPerSpeaker > 0,
+              maximumPasses > 0,
+              maximumRetriesPerSpeaker >= 0,
+              maximumAcousticLatencySeconds > 0 else {
+            throw CalibrationSessionError.invalidConfiguration
+        }
+        guard level > 0, level <= 0.5 else { throw CalibrationSignalError.invalidLevel }
+    }
+
+    public var eventsPerPass: Int { 2 * (measurementsPerSpeaker + maximumRetriesPerSpeaker) }
+
+    public func passStartSeconds(_ pass: Int) -> Double {
+        preRollSeconds + Double(pass) * (Double(eventsPerPass) * intervalSeconds + passGapSeconds)
+    }
+
+    public var maximumSessionSeconds: Double {
+        passStartSeconds(maximumPasses - 1) + Double(eventsPerPass) * intervalSeconds + postRollSeconds + 1
+    }
+}
+
+public struct CalibrationEmission: Sendable, Equatable, Codable {
+    public let pass: Int
+    public let sequence: Int
+    public let speakerIndex: Int
+    public let scheduledOutputFrame: Int64
+    public let scheduledOutputHostTime: UInt64
+}
+
+public struct AcousticMeasurement: Sendable, Equatable, Codable {
+    public let emission: CalibrationEmission
+    public let arrivalHostTime: UInt64
+    public let acousticLatencyMilliseconds: Double
+    public let estimate: DelayEstimate
+}
+
+public struct CalibrationPassMeasurements: Sendable, Equatable, Codable {
+    public let pass: Int
+    public let measurementsA: [AcousticMeasurement]
+    public let measurementsB: [AcousticMeasurement]
+    public let failures: [String]
+    public let summaryA: RobustMeasurementSummary
+    public let summaryB: RobustMeasurementSummary
+    public let relativeArrivalBMinusAMilliseconds: Double
+
+    public init(pass: Int, measurementsA: [AcousticMeasurement], measurementsB: [AcousticMeasurement], failures: [String]) throws {
+        self.pass = pass
+        self.measurementsA = measurementsA
+        self.measurementsB = measurementsB
+        self.failures = failures
+        summaryA = try RobustMeasurementSummary(values: measurementsA.map(\.acousticLatencyMilliseconds))
+        summaryB = try RobustMeasurementSummary(values: measurementsB.map(\.acousticLatencyMilliseconds))
+        relativeArrivalBMinusAMilliseconds = summaryB.medianMilliseconds - summaryA.medianMilliseconds
+    }
+}
+
+public enum CalibrationSessionError: LocalizedError {
+    case invalidConfiguration
+    case requiresMatchingSampleRates(output: Double, input: Double)
+    case inputUnavailable(String)
+    case timestampUnavailable(String)
+    case captureOverflow
+    case renderFailed(OSStatus)
+    case insufficientValidMeasurements(speaker: String, valid: Int, required: Int)
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidConfiguration: "Calibration experiment parameters are inconsistent."
+        case .requiresMatchingSampleRates(let output, let input): "The first prototype requires matching output and microphone rates (output=\(output)Hz, input=\(input)Hz)."
+        case .inputUnavailable(let name): "Microphone \(name) is unavailable."
+        case .timestampUnavailable(let stream): "\(stream) did not provide valid CoreAudio host timestamps."
+        case .captureOverflow: "The preallocated microphone capture buffer overflowed."
+        case .renderFailed(let status): "A realtime audio callback failed with CoreAudio status \(status)."
+        case .insufficientValidMeasurements(let speaker, let valid, let required): "\(speaker) produced only \(valid) valid measurements; \(required) are required."
+        }
+    }
+}
