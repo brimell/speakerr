@@ -65,13 +65,6 @@ public final class AggregateDeviceManager {
                 AudioHardwareDestroyAggregateDevice(aggregateID)
                 throw CoreAudioError("Verify aggregate subdevices", status: kAudioHardwareNotRunningError)
             }
-            for (index, subdevice) in composedSubdevices.enumerated() {
-                let outputChannels = (subdevice["channels-out"] as? NSNumber)?.intValue
-                guard outputChannels == outputs[index].channelCount else {
-                    AudioHardwareDestroyAggregateDevice(aggregateID)
-                    throw CoreAudioError("Verify aggregate output channels", status: kAudioHardwareUnsupportedOperationError)
-                }
-            }
             let driftReadback = (composedSubdevices[1]["drift"] as? NSNumber)?.intValue
             guard driftReadback == 1 else {
                 AudioHardwareDestroyAggregateDevice(aggregateID)
@@ -100,8 +93,7 @@ public final class AggregateDeviceManager {
             [
                 "uid": output.id,
                 "drift": index == 0 ? 0 : 1,
-                "drift quality": index == 0 ? 0 : Int(kAudioAggregateDriftCompensationMaxQuality),
-                "channels-out": output.channelCount
+                "drift quality": index == 0 ? 0 : Int(kAudioAggregateDriftCompensationMaxQuality)
             ]
         }
         return [

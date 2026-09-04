@@ -70,8 +70,6 @@ final class SpeakerrAudioTests: XCTestCase {
         }
         XCTAssertEqual(subdevices[0]["drift"] as? Int, 0)
         XCTAssertEqual(subdevices[1]["drift"] as? Int, 1)
-        XCTAssertEqual(subdevices[0]["channels-out"] as? Int, 2)
-        XCTAssertEqual(subdevices[1]["channels-out"] as? Int, 2)
     }
 
     func testDelayCanBeUpdatedAtomically() throws {
