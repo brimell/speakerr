@@ -66,4 +66,34 @@ final class SpeakerSessionStateTests: XCTestCase {
         XCTAssertTrue(coalescer.consumeIfDue(at: 150))
         XCTAssertFalse(coalescer.consumeIfDue(at: 200))
     }
+
+    func testChannelLayoutChangeIsDetectedIndependentlyOfSampleRate() {
+        let previous = ["a": DeviceIdentitySnapshot(uid: "a", objectID: 10, sampleRate: 44_100, channelCount: 2)]
+        let current = ["a": DeviceIdentitySnapshot(uid: "a", objectID: 10, sampleRate: 44_100, channelCount: 6)]
+        XCTAssertEqual(DeviceLifecycleComparison.compare(previous: previous, current: current, selectedUIDs: ["a"]), [.channelLayoutChanged(uid: "a", old: 2, new: 6)])
+    }
+
+    func testUnrelatedDeviceChangesAreIgnored() {
+        let previous = ["a": DeviceIdentitySnapshot(uid: "a", objectID: 10, sampleRate: 44_100, channelCount: 2)]
+        let current = ["a": DeviceIdentitySnapshot(uid: "a", objectID: 10, sampleRate: 44_100, channelCount: 2), "unrelated": DeviceIdentitySnapshot(uid: "unrelated", objectID: 99, sampleRate: 48_000, channelCount: 2)]
+        XCTAssertEqual(DeviceLifecycleComparison.compare(previous: previous, current: current, selectedUIDs: ["a"]), [])
+    }
+
+    func testDynamicCorrectionAloneRespectsBounds() {
+        XCTAssertThrowsError(try DelayComponents(dynamicCorrection: 1_000.1))
+        XCTAssertNoThrow(try DelayComponents(dynamicCorrection: 3.5))
+    }
+
+    func testBeginRebuildIsRejectedBeforeTheSessionHasEverStarted() {
+        var machine = SpeakerSessionStateMachine(state: .idle)
+        XCTAssertThrowsError(try machine.handle(.beginRebuild))
+    }
+
+    func testCalibrationStaleReasonIsPreservedThroughRebuild() throws {
+        var machine = SpeakerSessionStateMachine(state: .aligned)
+        XCTAssertEqual(try machine.handle(.beginRebuild), .rebuilding)
+        XCTAssertEqual(try machine.handle(.prepare), .preparing)
+        XCTAssertEqual(try machine.handle(.prepared), .ready)
+        XCTAssertEqual(try machine.handle(.invalidate(.sampleRateChanged)), .calibrationStale(.sampleRateChanged))
+    }
 }
