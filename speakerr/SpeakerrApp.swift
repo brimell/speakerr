@@ -14,9 +14,21 @@ final class CrashRelaunchManager {
         }
     }
 
-    func start() {
+    @discardableResult
+    func start() -> Bool {
         guard ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1" else {
-            return
+            return true
+        }
+
+        let bundleIdentifier = Bundle.main.bundleIdentifier
+        let hasAnotherInstance = bundleIdentifier.map {
+            NSRunningApplication.runningApplications(withBundleIdentifier: $0)
+                .contains { $0.processIdentifier != getpid() }
+        } ?? false
+
+        guard !hasAnotherInstance else {
+            NSApplication.shared.terminate(nil)
+            return false
         }
 
         let pid = getpid()
@@ -46,7 +58,7 @@ final class CrashRelaunchManager {
           exit 0
         fi
 
-        open -n "$app" --args --watchdog-relaunch
+        open "$app" --args --watchdog-relaunch
         """
 
         let process = Process()
@@ -56,7 +68,13 @@ final class CrashRelaunchManager {
         process.standardOutput = nil
         process.standardError = nil
 
-        try? process.run()
+        do {
+            try process.run()
+            return true
+        } catch {
+            print("Failed to start crash watchdog: \(error)")
+            return true
+        }
     }
 
     private func markerFileURL(forPID pid: pid_t) -> URL {
@@ -93,7 +111,10 @@ struct SpeakerrApp: App {
         outputSwitchShortcutManager = shortcutManager
         trayController = TrayController(audioEngine: engine, eqModel: model, updateChecker: checker)
 
-        crashRelaunchManager.start()
+        guard crashRelaunchManager.start() else {
+            return
+        }
+
         Self.configureEngineCallbacks(audioEngine: engine, eqModel: model)
         Self.requestMicrophonePermissionAndStart(audioEngine: engine, eqModel: model)
     }
