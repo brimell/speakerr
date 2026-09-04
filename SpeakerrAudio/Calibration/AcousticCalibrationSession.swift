@@ -61,7 +61,7 @@ private final class CalibrationOutputRenderState: @unchecked Sendable {
         let blockEnd = blockStart + Int64(count)
         let buffers = UnsafeMutableAudioBufferListPointer(ioData)
         for buffer in buffers { if let data = buffer.mData { memset(data, 0, Int(buffer.mDataByteSize)) } }
-        guard buffers.count >= assignments.reduce(0, { $0 + $1.count }) else { return record(kAudio_ParamError) }
+        guard OutputChannelMap.channelCount(in: buffers) >= assignments.reduce(0, { $0 + $1.count }) else { return record(kAudio_ParamError) }
 
         for route in assignments.indices {
             sourceLeft[route].update(repeating: 0, count: count)
@@ -91,12 +91,16 @@ private final class CalibrationOutputRenderState: @unchecked Sendable {
             )
             let assignment = assignments[route]
             for localChannel in 0..<assignment.count {
-                guard let destination = buffers[assignment.offset + localChannel].mData?.assumingMemoryBound(to: Float.self) else { continue }
                 switch assignment.source(forLocalChannel: localChannel) {
                 case .mono:
-                    for frame in 0..<count { destination[frame] = (delayedLeft[route][frame] + delayedRight[route][frame]) * 0.5 }
-                case .left: memcpy(destination, delayedLeft[route], count * MemoryLayout<Float>.size)
-                case .right: memcpy(destination, delayedRight[route], count * MemoryLayout<Float>.size)
+                    for frame in 0..<count {
+                        delayedLeft[route][frame] = (delayedLeft[route][frame] + delayedRight[route][frame]) * 0.5
+                    }
+                    OutputChannelMap.write(UnsafePointer(delayedLeft[route]), to: buffers, channel: assignment.offset + localChannel, frameCount: count)
+                case .left:
+                    OutputChannelMap.write(UnsafePointer(delayedLeft[route]), to: buffers, channel: assignment.offset + localChannel, frameCount: count)
+                case .right:
+                    OutputChannelMap.write(UnsafePointer(delayedRight[route]), to: buffers, channel: assignment.offset + localChannel, frameCount: count)
                 case .silence: break
                 }
             }

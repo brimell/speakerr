@@ -54,7 +54,7 @@ private final class AggregateRenderState {
         for buffer in buffers {
             if let data = buffer.mData { memset(data, 0, Int(buffer.mDataByteSize)) }
         }
-        guard buffers.count >= assignments.reduce(0, { $0 + $1.count }) else { return kAudio_ParamError }
+        guard OutputChannelMap.channelCount(in: buffers) >= assignments.reduce(0, { $0 + $1.count }) else { return kAudio_ParamError }
 
         generator.render(left: sourceLeft, right: sourceRight, frameCount: count)
         for routeIndex in assignments.indices {
@@ -67,17 +67,16 @@ private final class AggregateRenderState {
             )
             let assignment = assignments[routeIndex]
             for localChannel in 0..<assignment.count {
-                let bufferIndex = assignment.offset + localChannel
-                guard let destination = buffers[bufferIndex].mData?.assumingMemoryBound(to: Float.self) else { continue }
                 switch assignment.source(forLocalChannel: localChannel) {
                 case .mono:
                     for frame in 0..<count {
-                        destination[frame] = (delayedLeft[routeIndex][frame] + delayedRight[routeIndex][frame]) * 0.5
+                        delayedLeft[routeIndex][frame] = (delayedLeft[routeIndex][frame] + delayedRight[routeIndex][frame]) * 0.5
                     }
+                    OutputChannelMap.write(UnsafePointer(delayedLeft[routeIndex]), to: buffers, channel: assignment.offset + localChannel, frameCount: count)
                 case .left:
-                    memcpy(destination, delayedLeft[routeIndex], count * MemoryLayout<Float>.size)
+                    OutputChannelMap.write(UnsafePointer(delayedLeft[routeIndex]), to: buffers, channel: assignment.offset + localChannel, frameCount: count)
                 case .right:
-                    memcpy(destination, delayedRight[routeIndex], count * MemoryLayout<Float>.size)
+                    OutputChannelMap.write(UnsafePointer(delayedRight[routeIndex]), to: buffers, channel: assignment.offset + localChannel, frameCount: count)
                 case .silence:
                     break
                 }

@@ -26,6 +26,7 @@ private final class PersistentRenderState: @unchecked Sendable {
     private let assignments: [OutputChannelAssignment]
     private let masterEQ: ParametricEQ
     private let routeEQs: [ParametricEQ]
+    private let routeVolumeBits: [Atomic<UInt32>]
     private let mode = Atomic<UInt32>(PersistentRenderMode.muted.rawValue)
     private let sourceLeft: UnsafeMutablePointer<Float>
     private let sourceRight: UnsafeMutablePointer<Float>
@@ -51,6 +52,7 @@ private final class PersistentRenderState: @unchecked Sendable {
         assignments = OutputChannelMap.assignments(channelCounts: channelCounts)
         masterEQ = ParametricEQ(sampleRate: sampleRate)
         routeEQs = channelCounts.map { _ in ParametricEQ(sampleRate: sampleRate) }
+        routeVolumeBits = channelCounts.map { _ in Atomic<UInt32>(1.0.bitPattern) }
         let capacity = Int(Self.maximumFrames)
         sourceLeft = .allocate(capacity: capacity)
         sourceRight = .allocate(capacity: capacity)
@@ -89,6 +91,11 @@ private final class PersistentRenderState: @unchecked Sendable {
         routeEQs[route].bypass = bypass
     }
 
+    func setRouteVolume(route: Int, volume: Float) {
+        guard routeVolumeBits.indices.contains(route) else { return }
+        routeVolumeBits[route].store(max(0, min(1, volume)).bitPattern, ordering: .relaxed)
+    }
+
     func requestEmission(speaker: Int) -> UInt64 {
         emissionSpeaker.store(speaker, ordering: .relaxed)
         emissionStartFrame.store(-1, ordering: .relaxed)
@@ -105,7 +112,7 @@ private final class PersistentRenderState: @unchecked Sendable {
         let blockEnd = blockStart + Int64(count)
         let buffers = UnsafeMutableAudioBufferListPointer(ioData)
         for buffer in buffers { if let data = buffer.mData { memset(data, 0, Int(buffer.mDataByteSize)) } }
-        guard buffers.count >= assignments.reduce(0, { $0 + $1.count }) else { return record(kAudio_ParamError) }
+        guard OutputChannelMap.channelCount(in: buffers) >= assignments.reduce(0, { $0 + $1.count }) else { return record(kAudio_ParamError) }
 
         sourceLeft.initialize(repeating: 0, count: count)
         sourceRight.initialize(repeating: 0, count: count)
@@ -143,16 +150,27 @@ private final class PersistentRenderState: @unchecked Sendable {
             } else if currentMode == .programme {
                 routeEQs[route].process(buffer: routeLeft[route], frameCount: count, channel: 0)
                 routeEQs[route].process(buffer: routeRight[route], frameCount: count, channel: 1)
+                let volume = Float(bitPattern: routeVolumeBits[route].load(ordering: .relaxed))
+                if volume < 1 {
+                    for frame in 0..<count {
+                        routeLeft[route][frame] *= volume
+                        routeRight[route][frame] *= volume
+                    }
+                }
             }
             delays[route].process(left: UnsafePointer(routeLeft[route]), right: UnsafePointer(routeRight[route]), outputLeft: delayedLeft[route], outputRight: delayedRight[route], frameCount: count)
             let assignment = assignments[route]
             for channel in 0..<assignment.count {
-                guard let destination = buffers[assignment.offset + channel].mData?.assumingMemoryBound(to: Float.self) else { continue }
                 switch assignment.source(forLocalChannel: channel) {
                 case .mono:
-                    for frame in 0..<count { destination[frame] = (delayedLeft[route][frame] + delayedRight[route][frame]) * 0.5 }
-                case .left: memcpy(destination, delayedLeft[route], count * MemoryLayout<Float>.size)
-                case .right: memcpy(destination, delayedRight[route], count * MemoryLayout<Float>.size)
+                    for frame in 0..<count {
+                        delayedLeft[route][frame] = (delayedLeft[route][frame] + delayedRight[route][frame]) * 0.5
+                    }
+                    OutputChannelMap.write(UnsafePointer(delayedLeft[route]), to: buffers, channel: assignment.offset + channel, frameCount: count)
+                case .left:
+                    OutputChannelMap.write(UnsafePointer(delayedLeft[route]), to: buffers, channel: assignment.offset + channel, frameCount: count)
+                case .right:
+                    OutputChannelMap.write(UnsafePointer(delayedRight[route]), to: buffers, channel: assignment.offset + channel, frameCount: count)
                 case .silence: break
                 }
             }
@@ -246,6 +264,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
     private var pendingMasterBypass: Bool = false
     private var pendingRouteBands: [Int: [EQBand]] = [:]
     private var pendingRouteBypass: [Int: Bool] = [:]
+    private var pendingRouteVolumes: [Int: Float] = [:]
 
     public init(outputs: [OutputDevice], generation: UInt64 = 1, transportCapacityFrames: Int = 44_100, routingMode: SpeakerRoutingMode = .stereo) throws {
         guard outputs.count == 2 else { throw AudioRoutingError.requiresExactlyTwoOutputs }
@@ -281,6 +300,12 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         renderState?.setRouteEQBypass(route: route, bypass: bypass)
     }
 
+    public func setRouteVolume(route: Int, volume: Float) {
+        let clamped = max(0, min(1, volume))
+        pendingRouteVolumes[route] = clamped
+        renderState?.setRouteVolume(route: route, volume: clamped)
+    }
+
     public func start(calibrationLevel: Double = 0.12) throws {
         guard !running else { return }
         _ = try stateMachine.handle(.prepare)
@@ -293,6 +318,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             state.setMasterEQBypass(pendingMasterBypass)
             for (route, bands) in pendingRouteBands { state.setRouteEQBands(route: route, bands: bands) }
             for (route, bypass) in pendingRouteBypass { state.setRouteEQBypass(route: route, bypass: bypass) }
+            for (route, volume) in pendingRouteVolumes { state.setRouteVolume(route: route, volume: volume) }
             let unit = try createOutputUnit(aggregate: aggregate)
             self.aggregate = aggregate
             reference = chirp

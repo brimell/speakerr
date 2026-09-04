@@ -1,3 +1,4 @@
+import CoreAudio
 import Foundation
 
 public enum SpeakerRoutingMode: String, Codable, CaseIterable, Sendable {
@@ -34,6 +35,36 @@ enum OutputChannelMap {
         return channelCounts.map { count in
             defer { offset += count }
             return OutputChannelAssignment(offset: offset, count: count)
+        }
+    }
+
+    static func channelCount(in buffers: UnsafeMutableAudioBufferListPointer) -> Int {
+        buffers.reduce(0) { $0 + Int($1.mNumberChannels) }
+    }
+
+    static func write(
+        _ source: UnsafePointer<Float>,
+        to buffers: UnsafeMutableAudioBufferListPointer,
+        channel: Int,
+        frameCount: Int
+    ) {
+        var channelOffset = channel
+        for buffer in buffers {
+            let channels = Int(buffer.mNumberChannels)
+            guard channels > 0 else { continue }
+            guard channelOffset < channels else {
+                channelOffset -= channels
+                continue
+            }
+            guard let destination = buffer.mData?.assumingMemoryBound(to: Float.self) else { return }
+            if channels == 1 {
+                memcpy(destination, source, frameCount * MemoryLayout<Float>.size)
+            } else {
+                for frame in 0..<frameCount {
+                    destination[frame * channels + channelOffset] = source[frame]
+                }
+            }
+            return
         }
     }
 }
