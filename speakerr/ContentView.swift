@@ -2,6 +2,8 @@ import SwiftUI
 import CoreAudio
 import UniformTypeIdentifiers
 import AppKit
+import SpeakerrAudio
+import SpeakerrPresentation
 
 enum ContentViewLayout {
     case compact
@@ -21,6 +23,8 @@ struct ContentView: View {
     @StateObject private var presetManager = PresetManager()
 
     @State private var selectedInputID: AudioDeviceID?
+    @State private var selectedOutputDeviceUIDs: [String] = []
+    @State private var selectedEQTargetUID: String = "master"
     @State private var shortcutOutputDeviceUIDs: [String] = []
     @State private var showingSavePreset = false
     @State private var showingAutoEQ = false
@@ -41,6 +45,33 @@ struct ContentView: View {
     @StateObject private var launchAtLogin = LaunchAtLogin()
     private let settingsStore = AppSettingsStore.shared
     private let autoEQManager = AutoEQManager.shared
+
+    private var selectedOutputDevices: [AudioDevice] {
+        let uids = Set(selectedOutputDeviceUIDs)
+        return deviceManager.outputDevices.filter { uids.contains($0.uid) }
+    }
+
+    private var selectedOutputsSummaryText: String {
+        let selected = selectedOutputDevices
+        if selected.isEmpty {
+            return "Select Speakers…"
+        } else if selected.count == 1 {
+            return selected[0].name
+        } else if selected.count == 2 {
+            return "\(selected[0].name) + \(selected[1].name)"
+        } else {
+            return "\(selected.count) Speakers Selected"
+        }
+    }
+
+    private var selectedEQTargetBinding: Binding<String> {
+        Binding(
+            get: { selectedEQTargetUID },
+            set: { newTarget in
+                switchEQTarget(to: newTarget)
+            }
+        )
+    }
 
     private let compactMenuWidth: CGFloat = 640
 
@@ -99,14 +130,14 @@ struct ContentView: View {
                 selectedInputID = newDeviceID
             }
         }
-        .onChange(of: eqModel.parametricBands) { newValue in
-            audioEngine.setBands(newValue)
+        .onChange(of: eqModel.parametricBands) { _ in
+            syncEQToEngine()
         }
-        .onChange(of: eqModel.isEnabled) { newValue in
-            audioEngine.setBypass(!newValue)
+        .onChange(of: eqModel.isEnabled) { _ in
+            syncEQToEngine()
         }
-        .onChange(of: eqModel.isEQFiltersEnabled) { newValue in
-            audioEngine.setEQFiltersEnabled(newValue)
+        .onChange(of: eqModel.isEQFiltersEnabled) { _ in
+            syncEQToEngine()
         }
         .onChange(of: eqModel.preGain) { newValue in
             audioEngine.setPreGain(newValue)
@@ -232,14 +263,7 @@ struct ContentView: View {
                 .foregroundColor(.secondary)
                 .frame(width: 50, alignment: .leading)
 
-            Picker("", selection: selectedOutputBinding) {
-                Text("Select...").tag(nil as AudioDeviceID?)
-                ForEach(deviceManager.outputDevices) { device in
-                    Text(device.name).tag(device.id as AudioDeviceID?)
-                }
-            }
-            .labelsHidden()
-            .help("Choose the output device")
+            multiSpeakerOutputMenu
 
             Button {
                 refreshOutputDevices()
@@ -251,21 +275,66 @@ struct ContentView: View {
         }
     }
 
+    private var multiSpeakerOutputMenu: some View {
+        Menu {
+            Section("Output Speakers") {
+                ForEach(deviceManager.outputDevices) { device in
+                    Button {
+                        toggleOutputDevice(device)
+                    } label: {
+                        HStack {
+                            Text(device.name)
+                            if selectedOutputDeviceUIDs.contains(device.uid) {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+            if selectedOutputDeviceUIDs.count == 2 {
+                Divider()
+                Button {
+                    MainWindowCoordinator.shared.show()
+                } label: {
+                    Label("Calibrate & Align Speakers…", systemImage: "waveform.badge.mic")
+                }
+            }
+            if !selectedOutputDeviceUIDs.isEmpty {
+                Divider()
+                Button("Clear Selection") {
+                    clearOutputDevices()
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: selectedOutputDeviceUIDs.count > 1 ? "speaker.wave.2.fill" : "speaker.wave.2")
+                    .foregroundColor(selectedOutputDeviceUIDs.isEmpty ? .secondary : .accentColor)
+                Text(selectedOutputsSummaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.gray.opacity(0.12))
+            .cornerRadius(6)
+        }
+        .buttonStyle(.plain)
+        .help("Select output speakers. Select 2 speakers for aligned multi-speaker playback.")
+    }
+
     private func setupDeviceChangeCallback() {
         audioEngine.onOutputDeviceChanged = { _, uid, name in
             DispatchQueue.main.async {
-                eqModel.onDeviceChanged(deviceUID: uid, deviceName: name)
-                eqModel.resolvePresetSelection(using: presetManager.customPresets)
-                audioEngine.setBands(eqModel.parametricBands)
-                audioEngine.setBypass(!eqModel.isEnabled)
-                audioEngine.setEQFiltersEnabled(eqModel.isEQFiltersEnabled)
-                // Sync volume from profile to engine
-                audioEngine.setPreGain(eqModel.preGain)
-                audioEngine.setOutputGain(eqModel.outputGain)
-                audioEngine.setLimiterEnabled(eqModel.limiterEnabled)
-                audioEngine.setLimiterCeilingDB(eqModel.limiterCeilingDB)
-                audioEngine.setAutoStopClippingEnabled(eqModel.autoStopClippingEnabled)
-                audioEngine.setVolume(eqModel.volume)
+                if selectedOutputDeviceUIDs.count <= 1 {
+                    eqModel.onDeviceChanged(deviceUID: uid, deviceName: name)
+                    eqModel.resolvePresetSelection(using: presetManager.customPresets)
+                    syncEQToEngine()
+                }
             }
         }
 
@@ -290,6 +359,21 @@ struct ContentView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
                 .background(Color.primary.opacity(0.08), in: Capsule())
+
+            Button {
+                MainWindowCoordinator.shared.show()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "hifispeaker.2.fill")
+                    Text("Alignment")
+                        .font(.caption.weight(.medium))
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.accentColor.opacity(0.12), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("Open Speakerr Speaker Alignment & Calibration")
 
             Spacer()
 
@@ -457,6 +541,24 @@ struct ContentView: View {
 
     private var eqSliders: some View {
         VStack(spacing: 6) {
+            if selectedOutputDevices.count > 1 {
+                HStack(spacing: 6) {
+                    Text("EQ Target:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    Picker("", selection: selectedEQTargetBinding) {
+                        Text("Master (All)").tag("master")
+                        ForEach(selectedOutputDevices) { device in
+                            Text(device.name).tag(device.uid)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+                .padding(.bottom, 2)
+            }
+
             HStack {
                 Text("\(eqModel.parametricBands.count) band\(eqModel.parametricBands.count == 1 ? "" : "s")")
                     .font(.caption)
@@ -670,7 +772,7 @@ struct ContentView: View {
                     .frame(width: 62, alignment: .trailing)
             }
 
-            Text("Headroom is available in Advanced Options")
+            Text("Headroom is available in More Options")
                 .font(.caption2)
                 .foregroundColor(.secondary)
 
@@ -1027,18 +1129,6 @@ struct ContentView: View {
         }
     }
 
-    private var selectedOutputBinding: Binding<AudioDeviceID?> {
-        Binding(
-            get: { audioEngine.selectedOutputDeviceID },
-            set: { newDevice in
-                if let deviceID = newDevice {
-                    audioEngine.setOutputDevice(deviceID)
-                }
-                persistSelectedDevices()
-            }
-        )
-    }
-
     private var deviceControls: some View {
         VStack(spacing: 8) {
             HStack {
@@ -1067,14 +1157,7 @@ struct ContentView: View {
                     .foregroundColor(.secondary)
                     .frame(width: 50, alignment: .leading)
 
-                Picker("", selection: selectedOutputBinding) {
-                    Text("Select...").tag(nil as AudioDeviceID?)
-                    ForEach(deviceManager.outputDevices) { device in
-                        Text(device.name).tag(device.id as AudioDeviceID?)
-                    }
-                }
-                .labelsHidden()
-                .help("Select your speakers or headphones")
+                multiSpeakerOutputMenu
 
                 Button {
                     refreshOutputDevices()
@@ -1363,6 +1446,18 @@ struct ContentView: View {
 
                 Spacer()
 
+                Button {
+                    MainWindowCoordinator.shared.show()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "hifispeaker.2.fill")
+                        Text("Speaker Alignment & Calibration…")
+                    }
+                }
+                .help("Open Speakerr Speaker Alignment & Calibration")
+
+                Spacer()
+
                 statusIndicator
             }
 
@@ -1482,12 +1577,22 @@ struct ContentView: View {
             }
 
             HStack {
-                Button("Advanced Options") {
+                Button {
+                    MainWindowCoordinator.shared.show()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "hifispeaker.2.fill")
+                        Text("Speaker Alignment…")
+                    }
+                }
+                .help("Open Speakerr Speaker Alignment & Calibration")
+
+                Spacer()
+
+                Button("More Options...") {
                     openAdvancedWindow()
                 }
                 .disabled(advancedWindowID == nil && onOpenAdvancedWindow == nil)
-
-                Spacer()
 
                 Button("Quit") {
                     NSApplication.shared.terminate(nil)
@@ -1554,6 +1659,102 @@ struct ContentView: View {
         audioEngine.setAutoStopClippingEnabled(eqModel.autoStopClippingEnabled)
         audioEngine.setVolume(eqModel.volume)
         applyLatencySettingsToEngine()
+
+        syncEQToSpeakerrSession()
+    }
+
+    private func syncEQToSpeakerrSession() {
+        guard selectedOutputDeviceUIDs.count == 2 else { return }
+        let isBypassed = !eqModel.isEnabled || !eqModel.isEQFiltersEnabled
+        if selectedEQTargetUID == "master" {
+            SpeakerrStore.model.updateMasterEQ(bands: eqModel.parametricBands)
+            SpeakerrStore.model.updateMasterEQBypass(isBypassed)
+        } else if let index = selectedOutputDeviceUIDs.firstIndex(of: selectedEQTargetUID) {
+            SpeakerrStore.model.updateRouteEQ(route: index, bands: eqModel.parametricBands)
+            SpeakerrStore.model.updateRouteEQBypass(route: index, bypass: isBypassed)
+        }
+    }
+
+    private func toggleOutputDevice(_ device: AudioDevice) {
+        if let idx = selectedOutputDeviceUIDs.firstIndex(of: device.uid) {
+            selectedOutputDeviceUIDs.remove(at: idx)
+        } else if selectedOutputDeviceUIDs.count < 2 {
+            selectedOutputDeviceUIDs.append(device.uid)
+        }
+        applyOutputDevicesSelection()
+    }
+
+    private func clearOutputDevices() {
+        selectedOutputDeviceUIDs.removeAll()
+        applyOutputDevicesSelection()
+    }
+
+    private func switchEQTarget(to target: String) {
+        selectedEQTargetUID = target
+        if target == "master" {
+            eqModel.onDeviceChanged(deviceUID: "master", deviceName: "Master EQ")
+        } else if let dev = deviceManager.outputDevices.first(where: { $0.uid == target }) {
+            eqModel.onDeviceChanged(deviceUID: dev.uid, deviceName: dev.name)
+        }
+        eqModel.resolvePresetSelection(using: presetManager.customPresets)
+        syncEQToEngine()
+    }
+
+    private func applyOutputDevicesSelection() {
+        persistSelectedDevices()
+
+        if selectedOutputDeviceUIDs.count == 1 {
+            SpeakerrStore.model.pause()
+            if let device = deviceManager.outputDevices.first(where: { $0.uid == selectedOutputDeviceUIDs[0] }) {
+                audioEngine.setOutputDevice(device.id)
+                selectedEQTargetUID = device.uid
+                eqModel.onDeviceChanged(deviceUID: device.uid, deviceName: device.name)
+                eqModel.resolvePresetSelection(using: presetManager.customPresets)
+                syncEQToEngine()
+                if !audioEngine.isRunning, audioEngine.selectedInputDeviceID != nil {
+                    audioEngine.start()
+                }
+            }
+        } else if selectedOutputDeviceUIDs.count == 2 {
+            audioEngine.stop()
+
+            if SpeakerrStore.model.preferences.programmeInputUID == nil,
+               let inputID = selectedInputID,
+               let inputDevice = deviceManager.inputDevices.first(where: { $0.id == inputID }) {
+                SpeakerrStore.model.preferences.programmeInputUID = inputDevice.uid
+            }
+
+            SpeakerrStore.model.useSelectedSpeakers(selectedOutputDeviceUIDs)
+
+            let validTargets = ["master", selectedOutputDeviceUIDs[0], selectedOutputDeviceUIDs[1]]
+            if !validTargets.contains(selectedEQTargetUID) {
+                selectedEQTargetUID = "master"
+            }
+            switchEQTarget(to: selectedEQTargetUID)
+            preloadSpeakerrEQBands()
+        } else {
+            audioEngine.stop()
+            SpeakerrStore.model.pause()
+            selectedEQTargetUID = "master"
+        }
+    }
+
+    private func preloadSpeakerrEQBands() {
+        guard selectedOutputDeviceUIDs.count == 2 else { return }
+        if let masterProfile = DeviceProfileManager.shared.profile(for: "master") {
+            SpeakerrStore.model.updateMasterEQ(bands: masterProfile.effectiveBands)
+            SpeakerrStore.model.updateMasterEQBypass(!masterProfile.isEQEnabled || !masterProfile.isEQFiltersEnabled)
+        }
+        let uid0 = selectedOutputDeviceUIDs[0]
+        if let prof0 = DeviceProfileManager.shared.profile(for: uid0) {
+            SpeakerrStore.model.updateRouteEQ(route: 0, bands: prof0.effectiveBands)
+            SpeakerrStore.model.updateRouteEQBypass(route: 0, bypass: !prof0.isEQEnabled || !prof0.isEQFiltersEnabled)
+        }
+        let uid1 = selectedOutputDeviceUIDs[1]
+        if let prof1 = DeviceProfileManager.shared.profile(for: uid1) {
+            SpeakerrStore.model.updateRouteEQ(route: 1, bands: prof1.effectiveBands)
+            SpeakerrStore.model.updateRouteEQBypass(route: 1, bypass: !prof1.isEQEnabled || !prof1.isEQFiltersEnabled)
+        }
     }
 
     private func bandFrequencyLabel(_ index: Int) -> String {
@@ -1600,10 +1801,14 @@ struct ContentView: View {
             audioEngine.setInputDevice(blackhole.id)
         }
 
-        if !audioEngine.isRunning,
-           audioEngine.selectedInputDeviceID != nil,
-           audioEngine.selectedOutputDeviceID != nil {
-            audioEngine.start()
+        if selectedOutputDeviceUIDs.count == 2 {
+            applyOutputDevicesSelection()
+        } else if selectedOutputDeviceUIDs.count == 1 {
+            if !audioEngine.isRunning,
+               audioEngine.selectedInputDeviceID != nil,
+               audioEngine.selectedOutputDeviceID != nil {
+                audioEngine.start()
+            }
         }
     }
 
@@ -1629,10 +1834,21 @@ struct ContentView: View {
             }
         }
 
+        if let savedUIDs = settings.selectedOutputDeviceUIDs, !savedUIDs.isEmpty {
+            let availableUIDs = Set(deviceManager.outputDevices.map(\.uid))
+            let validUIDs = savedUIDs.filter { availableUIDs.contains($0) }
+            if !validUIDs.isEmpty {
+                selectedOutputDeviceUIDs = validUIDs
+                applyOutputDevicesSelection()
+                return
+            }
+        }
+
         if (force || audioEngine.selectedOutputDeviceID == nil), let savedOutputID = settings.selectedOutputDeviceID {
             let outputID = AudioDeviceID(savedOutputID)
-            if deviceManager.outputDevices.contains(where: { $0.id == outputID }) {
-                audioEngine.setOutputDevice(outputID)
+            if let matchedDevice = deviceManager.outputDevices.first(where: { $0.id == outputID }) {
+                selectedOutputDeviceUIDs = [matchedDevice.uid]
+                applyOutputDevicesSelection()
             }
         }
     }
@@ -1641,8 +1857,10 @@ struct ContentView: View {
         settingsStore.update { settings in
             settings.selectedInputDeviceID = selectedInputID.map { Int32($0) }
             settings.selectedOutputDeviceID = audioEngine.selectedOutputDeviceID.map { Int32($0) }
+            settings.selectedOutputDeviceUIDs = selectedOutputDeviceUIDs.isEmpty ? nil : selectedOutputDeviceUIDs
             settings.shortcutOutputDeviceUIDs = shortcutOutputDeviceUIDs.isEmpty ? nil : shortcutOutputDeviceUIDs
         }
+        SpeakerrStore.model.preferences.selectedSpeakerUIDs = selectedOutputDeviceUIDs.count == 2 ? selectedOutputDeviceUIDs : []
     }
 
     private func exportSettingsBackup() {
@@ -1714,8 +1932,8 @@ struct ContentView: View {
             preferredUIDs: shortcutOutputDeviceUIDs
         ) else { return }
 
-        audioEngine.setOutputDevice(nextDevice.id)
-        persistSelectedDevices()
+        selectedOutputDeviceUIDs = [nextDevice.uid]
+        applyOutputDevicesSelection()
     }
 
     private var shortcutTargetsMenu: some View {
@@ -1813,17 +2031,17 @@ struct ContentView: View {
     }
 
     private func refreshOutputDevices() {
-        let currentDeviceID = audioEngine.selectedOutputDeviceID
         deviceManager.refreshDevices()
-
-        guard let currentDeviceID else { return }
-        guard deviceManager.outputDevices.contains(where: { $0.id == currentDeviceID }) else {
-            if let fallbackDeviceID = deviceManager.getDefaultOutputDevice(),
-               deviceManager.outputDevices.contains(where: { $0.id == fallbackDeviceID }) {
-                audioEngine.setOutputDevice(fallbackDeviceID)
-                persistSelectedDevices()
+        let availableUIDs = Set(deviceManager.outputDevices.map(\.uid))
+        let remaining = selectedOutputDeviceUIDs.filter { availableUIDs.contains($0) }
+        if remaining != selectedOutputDeviceUIDs {
+            selectedOutputDeviceUIDs = remaining
+            if selectedOutputDeviceUIDs.isEmpty,
+               let fallbackDeviceID = deviceManager.getDefaultOutputDevice(),
+               let fallbackDevice = deviceManager.outputDevices.first(where: { $0.id == fallbackDeviceID }) {
+                selectedOutputDeviceUIDs = [fallbackDevice.uid]
             }
-            return
+            applyOutputDevicesSelection()
         }
     }
 

@@ -13,6 +13,10 @@ private actor PreviewSessionController: SpeakerSessionControlling {
     func recheck(inputUID: String, configuration: CalibrationExperimentConfiguration) async throws -> CalibrationPassMeasurements { throw CancellationError() }
     func applyDynamicCorrection(residualMilliseconds: Double) throws {}
     func setManualDelay(outputUID: String, milliseconds: Double) throws {}
+    func setMasterEQBands(_ bands: [EQBand]) async {}
+    func setMasterEQBypass(_ bypass: Bool) async {}
+    func setRouteEQBands(route: Int, bands: [EQBand]) async {}
+    func setRouteEQBypass(route: Int, bypass: Bool) async {}
 }
 
 @MainActor
