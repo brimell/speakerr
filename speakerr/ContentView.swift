@@ -1900,7 +1900,7 @@ private struct EQResponseGraphView: View {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.gray.opacity(0.08))
 
-                    ForEach(gainTicks, id: \.self) { tick in
+                    ForEach(Array(gainTicks.enumerated()), id: \.offset) { _, tick in
                         Path { path in
                             let y = yPosition(for: tick, in: height)
                             path.move(to: CGPoint(x: 0, y: y))
@@ -1912,7 +1912,7 @@ private struct EQResponseGraphView: View {
                         )
                     }
 
-                    ForEach(frequencyTicks, id: \.self) { tick in
+                    ForEach(Array(frequencyTicks.enumerated()), id: \.offset) { _, tick in
                         Path { path in
                             let x = xPosition(for: tick, in: width)
                             path.move(to: CGPoint(x: x, y: 0))
@@ -1938,7 +1938,7 @@ private struct EQResponseGraphView: View {
                             )
                     }
 
-                    ForEach(labeledFrequencyTicks, id: \.self) { tick in
+                    ForEach(Array(labeledFrequencyTicks.enumerated()), id: \.offset) { _, tick in
                         Text(formatFrequency(tick))
                             .font(.system(size: 9, weight: .medium, design: .monospaced))
                             .foregroundColor(.secondary)
@@ -1948,7 +1948,7 @@ private struct EQResponseGraphView: View {
                             )
                     }
 
-                    ForEach(gainTicks, id: \.self) { tick in
+                    ForEach(Array(gainTicks.enumerated()), id: \.offset) { _, tick in
                         Text(formatGain(tick))
                             .font(.system(size: 9, weight: .medium, design: .monospaced))
                             .foregroundColor(.secondary)
@@ -2093,7 +2093,7 @@ private struct SpectrumAnalyzerView: View {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.gray.opacity(0.08))
 
-                    ForEach(amplitudeTicks, id: \.self) { tick in
+                    ForEach(Array(amplitudeTicks.enumerated()), id: \.offset) { _, tick in
                         Path { path in
                             let y = yPosition(for: tick, in: height)
                             path.move(to: CGPoint(x: 0, y: y))
@@ -2102,7 +2102,7 @@ private struct SpectrumAnalyzerView: View {
                         .stroke(Color.secondary.opacity(0.1), lineWidth: 0.8)
                     }
 
-                    ForEach(frequencyTicks.filter { $0 <= maxFrequency }, id: \.self) { tick in
+                    ForEach(Array(frequencyTicks.filter { $0 <= maxFrequency }.enumerated()), id: \.offset) { _, tick in
                         Path { path in
                             let x = xPosition(for: tick, in: width)
                             path.move(to: CGPoint(x: x, y: 0))
@@ -2145,7 +2145,7 @@ private struct SpectrumAnalyzerView: View {
                             .foregroundColor(.secondary)
                     }
 
-                    ForEach(labeledFrequencyTicks.filter { $0 <= maxFrequency }, id: \.self) { tick in
+                    ForEach(Array(labeledFrequencyTicks.filter { $0 <= maxFrequency }.enumerated()), id: \.offset) { _, tick in
                         Text(formatFrequency(tick))
                             .font(.system(size: 9, weight: .medium, design: .monospaced))
                             .foregroundColor(.secondary)
