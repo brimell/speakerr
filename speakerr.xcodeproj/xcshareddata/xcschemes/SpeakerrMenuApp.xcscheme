@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "4038C1B150397EFA59ACA291"
-               BuildableName = "Speakerr.app"
+               BuildableName = "SpeakerrMenuApp.app"
                BlueprintName = "SpeakerrMenuApp"
                ReferencedContainer = "container:speakerr.xcodeproj">
             </BuildableReference>
@@ -31,7 +31,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "4038C1B150397EFA59ACA291"
-            BuildableName = "Speakerr.app"
+            BuildableName = "SpeakerrMenuApp.app"
             BlueprintName = "SpeakerrMenuApp"
             ReferencedContainer = "container:speakerr.xcodeproj">
          </BuildableReference>
@@ -54,7 +54,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "4038C1B150397EFA59ACA291"
-            BuildableName = "Speakerr.app"
+            BuildableName = "SpeakerrMenuApp.app"
             BlueprintName = "SpeakerrMenuApp"
             ReferencedContainer = "container:speakerr.xcodeproj">
          </BuildableReference>
@@ -71,7 +71,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "4038C1B150397EFA59ACA291"
-            BuildableName = "Speakerr.app"
+            BuildableName = "SpeakerrMenuApp.app"
             BlueprintName = "SpeakerrMenuApp"
             ReferencedContainer = "container:speakerr.xcodeproj">
          </BuildableReference>
