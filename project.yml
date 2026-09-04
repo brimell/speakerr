@@ -67,10 +67,27 @@ targets:
         CODE_SIGN_IDENTITY: "-"
     info:
       path: speakerr/Info.plist
+      properties:
+        CFBundleShortVersionString: 1.4.0
+        CFBundleVersion: 5
+        LSUIElement: true
+        NSMicrophoneUsageDescription: speakerr needs audio input access to capture audio from BlackHole for EQ processing.
     entitlements:
       path: speakerr/speakerr.entitlements
 
 schemes:
+  speakerr:
+    build:
+      targets:
+        speakerr: all
+    run:
+      config: Release
+  speakerr-test:
+    build:
+      targets:
+        speakerr-test: all
+    run:
+      config: Debug
   SpeakerrAudio:
     build:
       targets:
