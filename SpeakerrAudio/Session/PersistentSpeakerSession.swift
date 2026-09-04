@@ -311,6 +311,8 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         calibrationSnapshot?.isValid(outputUIDs: outputUIDs, sampleRate: sampleRate, sessionGeneration: generation) == true && stateMachine.state == .aligned
     }
 
+    public var aggregateDeviceID: AudioDeviceID? { aggregate?.deviceID }
+
     public func invalidate(_ reason: CalibrationStaleReason) {
         generation &+= 1
         calibrationSnapshot = nil

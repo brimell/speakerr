@@ -32,6 +32,7 @@
 		56E711DC2278BC8CC9B7D10C /* SettingsTransfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16332FF47332BF0E7312553F /* SettingsTransfer.swift */; };
 		58F1285DA35E8F73BB262CC5 /* ContinuousMicrophoneCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46CA8CBAC6BF673DC8D6384 /* ContinuousMicrophoneCapture.swift */; };
 		5CB0EC3CD9091A437593966C /* NormalizedCrossCorrelationEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0A6D49F33073B396772C40 /* NormalizedCrossCorrelationEstimator.swift */; };
+		5F97E4F369EFE4A2ECD92FFD /* CoreAudioDeviceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7B48EE55C6ABCDFA9895FB /* CoreAudioDeviceMonitor.swift */; };
 		625973D16B8B927880EA5579 /* InteractiveDelayCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84BC3BCB47471F5D7D27A4DB /* InteractiveDelayCommand.swift */; };
 		689CD76A34468AFB1DF0DB4D /* EQSliderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FFE4ED5FE9EDA2C58B46737 /* EQSliderView.swift */; };
 		691AFC21E5B55BCA2358F848 /* FractionalDelayLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 501BF7139711E0DC1316D187 /* FractionalDelayLine.swift */; };
@@ -128,6 +129,7 @@
 		A537631D313AF47D1EFBF490 /* speakerr.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = speakerr.entitlements; sourceTree = "<group>"; };
 		A5C5B57543952E0AEEE32150 /* SpeakerrAudioTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SpeakerrAudioTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A77BDA4EABB08BDE64B162FE /* SpeakerrAudio.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = SpeakerrAudio.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA7B48EE55C6ABCDFA9895FB /* CoreAudioDeviceMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreAudioDeviceMonitor.swift; sourceTree = "<group>"; };
 		AB75A00442529EDD4AC8A873 /* CalibrationExperiment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationExperiment.swift; sourceTree = "<group>"; };
 		AB7B6EB861770579C447D381 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AFEB06FAE4DC2C4EACA5119A /* CalibrationSignal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationSignal.swift; sourceTree = "<group>"; };
@@ -196,6 +198,7 @@
 		7833E827048E776993A7850C /* Session */ = {
 			isa = PBXGroup;
 			children = (
+				AA7B48EE55C6ABCDFA9895FB /* CoreAudioDeviceMonitor.swift */,
 				F3AFFC7AA962F79CE32BC9B5 /* PersistentSpeakerSession.swift */,
 				E0902EC52E6C1C5F43F7B996 /* SpeakerSessionState.swift */,
 			);
@@ -485,6 +488,7 @@
 				087A6F6671D4F85BF7D7C6A9 /* CalibrationSignal.swift in Sources */,
 				58F1285DA35E8F73BB262CC5 /* ContinuousMicrophoneCapture.swift in Sources */,
 				21926011A10385D3CD68ADF5 /* CoreAudioAggregateRoutingBackend.swift in Sources */,
+				5F97E4F369EFE4A2ECD92FFD /* CoreAudioDeviceMonitor.swift in Sources */,
 				2CB768C2BF7D803D224700CD /* CoreAudioProperty.swift in Sources */,
 				B73F9D4CB5C14808892FE1C0 /* FFT.swift in Sources */,
 				691AFC21E5B55BCA2358F848 /* FractionalDelayLine.swift in Sources */,
