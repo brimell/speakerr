@@ -163,7 +163,17 @@ struct ContentView: View {
     }
 
     private var compactLayoutBody: some View {
-        mainContent
+        VStack(spacing: 12) {
+            header
+            Divider()
+            eqSliders
+            preGainControl
+            if audioEngine.outputDeviceNeedsVolumeControl {
+                volumeControl
+            }
+            compactOutputControl
+            footer
+        }
             .padding(14)
             .frame(width: compactMenuWidth)
     }
