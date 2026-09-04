@@ -23,7 +23,7 @@ final class UpdateChecker: NSObject, ObservableObject {
 
     private static let apiURL = URL(string: "https://api.github.com/repos/brimell/SoundMax/releases/latest")!
     private static let checkInterval: TimeInterval = 3600
-    private static let dmgAssetName = "SoundMaxx-Installer.dmg"
+    private static let dmgAssetName = "speakerr-Installer.dmg"
 
     private var timer: Timer?
     private var downloadSession: URLSession?

@@ -105,7 +105,7 @@ class AudioEngine: ObservableObject {
     private var defaultOutputDeviceChangedListener: AudioObjectPropertyListenerBlock?
 
     static let bandFrequencies: [Float] = EQBand.defaultFrequencies
-    static let microphoneAccessDeniedMessage = "Microphone access is denied. SoundMaxx needs microphone permission to capture audio input. Enable it in System Settings > Privacy & Security > Microphone, then restart SoundMaxx."
+    static let microphoneAccessDeniedMessage = "Microphone access is denied. speakerr needs microphone permission to capture audio input. Enable it in System Settings > Privacy & Security > Microphone, then restart speakerr."
 
     init() {
         registerHardwareDeviceListener()

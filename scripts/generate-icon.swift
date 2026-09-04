@@ -16,7 +16,7 @@ let sizes: [(size: Int, scale: Int, name: String)] = [
     (512, 2, "icon_512x512@2x.png"),
 ]
 
-let outputDir = "SoundMaxx/Assets.xcassets/AppIcon.appiconset"
+let outputDir = "speakerr/Assets.xcassets/AppIcon.appiconset"
 
 // Create icon with SF Symbol on gradient background
 func createIcon(size: Int) -> NSImage {

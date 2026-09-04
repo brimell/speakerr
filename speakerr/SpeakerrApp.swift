@@ -60,7 +60,7 @@ final class CrashRelaunchManager {
     }
 
     private func markerFileURL(forPID pid: pid_t) -> URL {
-        let fileName = "soundmaxx-graceful-exit-\(pid)-\(sessionID).flag"
+        let fileName = "speakerr-graceful-exit-\(pid)-\(sessionID).flag"
         return FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
     }
 
@@ -70,7 +70,7 @@ final class CrashRelaunchManager {
 }
 
 @main
-struct SoundMaxxApp: App {
+struct SpeakerrApp: App {
     @StateObject private var audioEngine: AudioEngine
     @StateObject private var eqModel: EQModel
     @StateObject private var updateChecker: UpdateChecker

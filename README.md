@@ -1,20 +1,20 @@
-# SoundMaxx
+# speakerr
 
 A free, open-source macOS system-wide 10-band parametric equalizer.
 
-SoundMaxx sits in your menu bar and applies real-time EQ processing to all system audio, letting you fine-tune your listening experience across any app.
+speakerr sits in your menu bar and applies real-time EQ processing to all system audio, letting you fine-tune your listening experience across any app.
 
-Project website: [https://brimell.github.io/SoundMaxx/](https://brimell.github.io/SoundMaxx/)
+Project website: [https://brimell.github.io/speakerr/](https://brimell.github.io/speakerr/)
 
 ## Screenshots
 
 Tray Menu:
 <br />
-<img src="docs/Screenshot%202026-04-17%20at%2020.26.21.png" alt="SoundMaxx screenshot 1" width="500" />
+<img src="docs/Screenshot%202026-04-17%20at%2020.26.21.png" alt="speakerr screenshot 1" width="500" />
 
 Main Menu:
 <br />
-<img src="docs/Screenshot%202026-04-17%20at%2020.26.42.png" alt="SoundMaxx screenshot 2" width="500" />
+<img src="docs/Screenshot%202026-04-17%20at%2020.26.42.png" alt="speakerr screenshot 2" width="500" />
 
 ## Features
 
@@ -56,7 +56,7 @@ Main Menu:
 
 ### Step 1: Install BlackHole
 
-BlackHole is a free virtual audio driver that routes system audio through SoundMaxx.
+BlackHole is a free virtual audio driver that routes system audio through speakerr.
 
 ```bash
 brew install blackhole-2ch
@@ -64,7 +64,7 @@ brew install blackhole-2ch
 
 Or download directly from [BlackHole Releases](https://github.com/ExistentialAudio/BlackHole/releases).
 
-### Step 2: Install SoundMaxx
+### Step 2: Install speakerr
 
 Visit the website for screenshots and a quick feature overview:
 
@@ -73,7 +73,7 @@ Visit the website for screenshots and a quick feature overview:
 **Option A: Download Release (Recommended)**
 
 1. Download the latest DMG from [Releases](https://github.com/brimell/SoundMax/releases)
-2. Open the DMG and drag SoundMaxx to Applications
+2. Open the DMG and drag speakerr to Applications
 3. If macOS blocks the app: Right-click → Open → Open
 
 **Option B: Build from Source**
@@ -86,10 +86,10 @@ xcode-select --install
 brew install xcodegen
 
 # Clone and build
-git clone https://github.com/brimell/SoundMaxx.git
-cd SoundMaxx
+git clone https://github.com/brimell/speakerr.git
+cd speakerr
 xcodegen generate
-xcodebuild -project SoundMaxx.xcodeproj -scheme SoundMaxx -configuration Release build
+xcodebuild -project speakerr.xcodeproj -scheme speakerr -configuration Release build
 ```
 
 ## Setup Guide
@@ -101,7 +101,7 @@ xcodebuild -project SoundMaxx.xcodeproj -scheme SoundMaxx -configuration Release
    - Select **BlackHole 2ch**
    - This routes all system audio through BlackHole
 
-2. **Launch SoundMaxx**
+2. **Launch speakerr**
    - Open from Applications or Spotlight
    - Look for the slider icon (☰) in the menu bar
    - Grant microphone access when prompted (required to capture audio from BlackHole)
@@ -118,7 +118,7 @@ xcodebuild -project SoundMaxx.xcodeproj -scheme SoundMaxx -configuration Release
 
 ```
 ┌─────────────┐    ┌───────────┐    ┌──────────────────────────────────────┐    ┌─────────────┐
-│  Your Apps  │ →  │ BlackHole │ →  │               SoundMaxx              │ →  │  Speakers   │
+│  Your Apps  │ →  │ BlackHole │ →  │               speakerr              │ →  │  Speakers   │
 │ (Spotify,   │    │   (2ch)   │    │ Headroom → EQ → Volume → Limiter    │    │ (Real Audio │
 │  YouTube)   │    │           │    │                                      │    │   Output)   │
 └─────────────┘    └───────────┘    └──────────────────────────────────────┘    └─────────────┘
@@ -167,11 +167,11 @@ Each band includes additional controls under the slider:
 
 ### Launch at Login
 
-Check the "Launch at Login" box to have SoundMaxx start automatically when you log in. This setting is managed through macOS Login Items.
+Check the "Launch at Login" box to have speakerr start automatically when you log in. This setting is managed through macOS Login Items.
 
 ### Per-Device Profiles
 
-SoundMaxx automatically remembers your EQ settings for each output device:
+speakerr automatically remembers your EQ settings for each output device:
 
 1. **First time with a device**: Adjust your EQ settings and click "Save Profile"
 2. **Returning to a device**: Your saved EQ enabled state, bands, and volume are automatically restored
@@ -192,7 +192,7 @@ Use the global shortcut **Control+Option+Command+O** to jump to the next availab
 
 ### Latency & Buffer Controls
 
-SoundMaxx uses a three-stage buffering pipeline to balance latency and stability. All controls are in **Advanced Options → Latency**.
+speakerr uses a three-stage buffering pipeline to balance latency and stability. All controls are in **Advanced Options → Latency**.
 
 | Control | Range | Effect |
 | ------- | ----- | ------ |
@@ -224,13 +224,13 @@ In addition to browsing AutoEQ inside the app, you can import downloaded AutoEQ 
 
 1. Click the **import icon** next to the preset and AutoEQ buttons
 2. Select an AutoEQ `ParametricEQ.txt` file (or `GraphicEQ.txt`)
-3. SoundMaxx parses and applies the curve to your current EQ
+3. speakerr parses and applies the curve to your current EQ
 
 This is useful when sharing tuned files or testing custom AutoEQ exports.
 
 ### AutoEQ Headphone Correction
 
-SoundMaxx integrates with the [AutoEQ](https://github.com/jaakkopasanen/AutoEq) project to provide scientifically-measured frequency response corrections for popular headphones.
+speakerr integrates with the [AutoEQ](https://github.com/jaakkopasanen/AutoEq) project to provide scientifically-measured frequency response corrections for popular headphones.
 
 1. Click the **headphones icon** (🎧) next to the preset menu
 2. Search for your headphones or browse the list
@@ -250,8 +250,8 @@ The correction curves are fetched from the AutoEQ database and converted to our 
 ### No Audio Output
 
 1. Verify BlackHole is set as system output in System Settings → Sound
-2. Check SoundMaxx shows "Running" status (green indicator)
-3. Ensure the correct output device is selected in SoundMaxx
+2. Check speakerr shows "Running" status (green indicator)
+3. Ensure the correct output device is selected in speakerr
 4. Try clicking Stop, then Start again
 
 ### No Sound from Specific Apps
@@ -260,10 +260,10 @@ Some apps have their own audio output settings. Check the app's preferences and 
 
 ### "Microphone Access" Prompt
 
-SoundMaxx requires microphone permission to capture audio from BlackHole. This is a macOS security requirement for any app that reads audio input.
+speakerr requires microphone permission to capture audio from BlackHole. This is a macOS security requirement for any app that reads audio input.
 
 - Click **Allow** when prompted
-- If previously denied: System Settings → Privacy & Security → Microphone → Enable SoundMaxx
+- If previously denied: System Settings → Privacy & Security → Microphone → Enable speakerr
 
 ### App Won't Open (Blocked by macOS)
 
@@ -280,18 +280,18 @@ For unsigned builds, macOS Gatekeeper may block the app:
 
 ### Sample Rate Mismatch Errors
 
-SoundMaxx attempts to match sample rates automatically. If issues persist:
+speakerr attempts to match sample rates automatically. If issues persist:
 
 1. Open **Audio MIDI Setup** (in /Applications/Utilities)
 2. Set both BlackHole and your output device to the same sample rate
-3. Restart SoundMaxx
+3. Restart speakerr
 
 ## Project Structure
 
 ```
-SoundMaxx/
-├── SoundMaxx/
-│   ├── SoundMaxxApp.swift           # App entry, menu bar setup
+speakerr/
+├── speakerr/
+│   ├── SpeakerrApp.swift           # App entry, menu bar setup
 │   ├── ContentView.swift            # Main UI
 │   ├── Audio/
 │   │   ├── AudioEngine.swift        # Core Audio routing (AUHAL)
@@ -385,10 +385,10 @@ Useful options:
 ./scripts/publish-release.sh --skip-build
 
 # Override release metadata
-./scripts/publish-release.sh --tag v1.0.1 --title "SoundMaxx v1.0.1" --notes "Release notes here"
+./scripts/publish-release.sh --tag v1.0.1 --title "speakerr v1.0.1" --notes "Release notes here"
 
 # Publish to a specific repository
-./scripts/publish-release.sh --repo brimell/SoundMaxx
+./scripts/publish-release.sh --repo brimell/speakerr
 ```
 
 Behavior:
@@ -400,10 +400,10 @@ Behavior:
 For signed distribution:
 ```bash
 # Sign the app
-codesign --deep --force --verify --verbose --sign "Developer ID Application: Your Name" build/DerivedData/Build/Products/Release/SoundMaxx.app
+codesign --deep --force --verify --verbose --sign "Developer ID Application: Your Name" build/DerivedData/Build/Products/Release/speakerr.app
 
 # Notarize
-xcrun notarytool submit build/SoundMaxx-Installer.dmg --apple-id your@email.com --team-id TEAMID --password app-specific-password
+xcrun notarytool submit build/speakerr-Installer.dmg --apple-id your@email.com --team-id TEAMID --password app-specific-password
 ```
 
 ## License

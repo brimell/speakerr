@@ -271,7 +271,7 @@ struct ContentView: View {
             Image(systemName: "slider.horizontal.3")
                 .font(.title)
 
-            Text("SoundMaxx EQ")
+            Text("speakerr EQ")
                 .font(.title3.weight(.semibold))
 
             Text("by Bill Rimell")
@@ -382,7 +382,7 @@ struct ContentView: View {
 
                 Divider()
 
-                Text("Tip: Set macOS output to BlackHole 2ch, then choose your real output in SoundMaxx.")
+                Text("Tip: Set macOS output to BlackHole 2ch, then choose your real output in speakerr.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -1136,7 +1136,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .help("Import a SoundMaxx JSON backup and apply it immediately")
+                .help("Import a speakerr JSON backup and apply it immediately")
 
                 Spacer()
             }
@@ -1349,7 +1349,7 @@ struct ContentView: View {
                 Toggle("Launch at Login", isOn: $launchAtLogin.isEnabled)
                     .font(.caption)
                     .toggleStyle(.checkbox)
-                    .help("Automatically start SoundMaxx when you log in")
+                    .help("Automatically start speakerr when you log in")
 
                 Spacer()
 
@@ -1417,7 +1417,7 @@ struct ContentView: View {
                 Button("Quit") {
                     NSApplication.shared.terminate(nil)
                 }
-                .help("Quit SoundMaxx")
+                .help("Quit speakerr")
             }
         }
     }
@@ -1637,8 +1637,8 @@ struct ContentView: View {
 
     private func exportSettingsBackup() {
         let savePanel = NSSavePanel()
-        savePanel.title = "Export SoundMaxx Settings"
-        savePanel.nameFieldStringValue = "SoundMaxx-Settings-Backup.json"
+        savePanel.title = "Export speakerr Settings"
+        savePanel.nameFieldStringValue = "speakerr-Settings-Backup.json"
         savePanel.allowedContentTypes = [.json]
         savePanel.isExtensionHidden = false
 
@@ -1662,7 +1662,7 @@ struct ContentView: View {
 
     private func importSettingsBackup() {
         let openPanel = NSOpenPanel()
-        openPanel.title = "Import SoundMaxx Settings"
+        openPanel.title = "Import speakerr Settings"
         openPanel.allowedContentTypes = [.json]
         openPanel.allowsMultipleSelection = false
 

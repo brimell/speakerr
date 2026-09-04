@@ -1,16 +1,16 @@
 #!/bin/bash
 
-# Build Release script for SoundMaxx
+# Build Release script for speakerr
 # Creates a DMG installer for distribution
 
 set -e
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="$PROJECT_DIR/build"
-APP_NAME="SoundMaxx"
-DMG_NAME="SoundMaxx-Installer"
+APP_NAME="speakerr"
+DMG_NAME="speakerr-Installer"
 
-echo "=== Building SoundMaxx Release ==="
+echo "=== Building speakerr Release ==="
 
 # Clean previous builds
 rm -rf "$BUILD_DIR"
@@ -19,8 +19,8 @@ mkdir -p "$BUILD_DIR"
 # Build release version
 echo "Building release..."
 cd "$PROJECT_DIR"
-xcodebuild -project SoundMaxx.xcodeproj \
-    -scheme SoundMaxx \
+xcodebuild -project speakerr.xcodeproj \
+    -scheme speakerr \
     -configuration Release \
     -derivedDataPath "$BUILD_DIR/DerivedData" \
     clean build

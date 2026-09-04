@@ -23,7 +23,7 @@ final class TrayController: NSObject {
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         guard let button = statusItem.button else { return }
-        button.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: "SoundMaxx EQ")
+        button.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: "speakerr EQ")
         button.action = #selector(buttonClicked)
         button.target = self
         button.sendAction(on: [.leftMouseDown, .rightMouseDown])
@@ -110,7 +110,7 @@ final class TrayController: NSObject {
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Quit SoundMaxx", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit speakerr", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quitItem)
 
         return menu
@@ -172,10 +172,10 @@ final class TrayController: NSObject {
                 backing: .buffered,
                 defer: false
             )
-            window.title = "SoundMaxx Advanced"
+            window.title = "speakerr Advanced"
             window.contentViewController = controller
             window.minSize = NSSize(width: 700, height: 620)
-            window.setFrameAutosaveName("SoundMaxxAdvancedWindow")
+            window.setFrameAutosaveName("speakerrAdvancedWindow")
             window.center()
             advancedWindow = window
         }

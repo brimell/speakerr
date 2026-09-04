@@ -18,7 +18,7 @@ Options:
   --skip-build         Skip running scripts/build-release.sh
   --asset <path>       Explicit DMG path to upload
   --tag <tag>          Release tag (default: v<CFBundleShortVersionString>)
-  --title <title>      Release title (default: SoundMaxx <tag> [build n])
+  --title <title>      Release title (default: speakerr <tag> [build n])
   --notes <text>       Release notes text for newly created releases
     --repo <owner/repo>  GitHub repository slug (default: autodetect)
     --env-file <path>    Load release settings from this .env file (default: ./.env)
@@ -163,8 +163,8 @@ fi
 
 BUILD_SCRIPT="$SCRIPT_DIR/build-release.sh"
 BUILD_DIR="$PROJECT_DIR/build"
-INFO_PLIST="$PROJECT_DIR/SoundMaxx/Info.plist"
-DEFAULT_DMG="$BUILD_DIR/SoundMaxx-Installer.dmg"
+INFO_PLIST="$PROJECT_DIR/speakerr/Info.plist"
+DEFAULT_DMG="$BUILD_DIR/speakerr-Installer.dmg"
 
 if [[ -z "$REPO" ]]; then
     REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || true)"
@@ -183,7 +183,7 @@ if [[ -z "$RELEASE_TAG" ]]; then
 fi
 
 if [[ -z "$RELEASE_TITLE" ]]; then
-    RELEASE_TITLE="SoundMaxx ${RELEASE_TAG}"
+    RELEASE_TITLE="speakerr ${RELEASE_TAG}"
     if [[ -n "$BUILD_NUMBER" ]]; then
         RELEASE_TITLE+=" (build ${BUILD_NUMBER})"
     fi

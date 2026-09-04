@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "3726484049C26C4BCDA7CB4C"
-               BuildableName = "SoundMaxx.app"
-               BlueprintName = "SoundMaxx"
-               ReferencedContainer = "container:SoundMaxx.xcodeproj">
+               BuildableName = "speakerr.app"
+               BlueprintName = "speakerr"
+               ReferencedContainer = "container:speakerr.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -45,9 +45,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "3726484049C26C4BCDA7CB4C"
-            BuildableName = "SoundMaxx.app"
-            BlueprintName = "SoundMaxx"
-            ReferencedContainer = "container:SoundMaxx.xcodeproj">
+            BuildableName = "speakerr.app"
+            BlueprintName = "speakerr"
+            ReferencedContainer = "container:speakerr.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -62,9 +62,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "3726484049C26C4BCDA7CB4C"
-            BuildableName = "SoundMaxx.app"
-            BlueprintName = "SoundMaxx"
-            ReferencedContainer = "container:SoundMaxx.xcodeproj">
+            BuildableName = "speakerr.app"
+            BlueprintName = "speakerr"
+            ReferencedContainer = "container:speakerr.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

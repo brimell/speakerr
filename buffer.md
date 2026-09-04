@@ -1,6 +1,6 @@
 ## Latency & Buffer Controls
 
-SoundMaxx uses a buffered audio pipeline to balance **latency (responsiveness)** and **stability (no crackles/dropouts)**. Understanding how this works helps you tune performance for your system.
+speakerr uses a buffered audio pipeline to balance **latency (responsiveness)** and **stability (no crackles/dropouts)**. Understanding how this works helps you tune performance for your system.
 
 ### How the Buffers Work
 
@@ -94,7 +94,7 @@ Effective: in Xf, out Yf, ring Zf
 - **out** = actual output device buffer
 - **ring** = total internal buffer size
 
-Devices may not support exact values — SoundMaxx automatically clamps to the nearest supported size.
+Devices may not support exact values — speakerr automatically clamps to the nearest supported size.
 
 ---
 

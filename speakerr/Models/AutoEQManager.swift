@@ -21,9 +21,9 @@ class AutoEQManager: ObservableObject {
     private var allHeadphones: [AutoEQHeadphone] = []
     private var currentQuery = ""
     private var hasLoadedIndex = false
-    private let cachedIndexKey = "SoundMaxx.AutoEQ.cachedIndex.v1"
-    private let favoritesKey = "SoundMaxx.AutoEQ.favorites.v1"
-    private let curveCachePrefix = "SoundMaxx.AutoEQ.curve.v1."
+    private let cachedIndexKey = "speakerr.AutoEQ.cachedIndex.v1"
+    private let favoritesKey = "speakerr.AutoEQ.favorites.v1"
+    private let curveCachePrefix = "speakerr.AutoEQ.curve.v1."
 
     private init(session: URLSession = .shared) {
         self.session = session
@@ -164,7 +164,7 @@ class AutoEQManager: ObservableObject {
         }
 
         var request = URLRequest(url: url)
-        request.addValue("SoundMaxx", forHTTPHeaderField: "User-Agent")
+        request.addValue("speakerr", forHTTPHeaderField: "User-Agent")
 
         session.dataTask(with: request) { [weak self] data, response, error in
             DispatchQueue.main.async {
@@ -209,7 +209,7 @@ class AutoEQManager: ObservableObject {
 
         var request = URLRequest(url: url)
         request.addValue("text/plain", forHTTPHeaderField: "Accept")
-        request.addValue("SoundMaxx", forHTTPHeaderField: "User-Agent")
+        request.addValue("speakerr", forHTTPHeaderField: "User-Agent")
 
         session.dataTask(with: request) { [weak self] data, response, error in
             DispatchQueue.main.async {

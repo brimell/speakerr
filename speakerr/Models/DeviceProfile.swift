@@ -122,7 +122,7 @@ class DeviceProfileManager: ObservableObject {
 
     @Published private(set) var profiles: [String: DeviceProfile] = [:]
 
-    private let profilesKey = "SoundMaxx.DeviceProfiles"
+    private let profilesKey = "speakerr.DeviceProfiles"
     private var cachedEncodedProfiles: Data?
 
     init() {
