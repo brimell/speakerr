@@ -182,6 +182,9 @@ private final class PersistentRenderState: @unchecked Sendable {
                 }
             }
         }
+        if currentMode == .programme, routingMode == .mono, let firstRoute = delayedLeft.first {
+            OutputChannelMap.writeToAllChannels(UnsafePointer(firstRoute), to: buffers, frameCount: count)
+        }
         framePosition = blockEnd
         renderedFrames.store(blockEnd, ordering: .releasing)
         callbackCount.wrappingAdd(1, ordering: .relaxed)
