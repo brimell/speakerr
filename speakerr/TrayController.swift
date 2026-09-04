@@ -106,7 +106,11 @@ final class TrayController: NSObject {
 
         menu.addItem(.separator())
 
-        addItem(to: menu, title: "Advanced Options…", action: #selector(openAdvancedWindowAction), keyEquivalent: ",")
+        addItem(to: menu,
+                title: "Speaker Alignment & Calibration…",
+                action: #selector(openSpeakerAlignmentAction))
+
+        addItem(to: menu, title: "More Options…", action: #selector(openAdvancedWindowAction), keyEquivalent: ",")
 
         menu.addItem(.separator())
 
@@ -152,6 +156,10 @@ final class TrayController: NSObject {
         ) else { return }
         audioEngine.setOutputDevice(nextDevice.id)
         AppSettingsStore.shared.update { $0.selectedOutputDeviceID = Int32(nextDevice.id) }
+    }
+
+    @MainActor @objc private func openSpeakerAlignmentAction() {
+        MainWindowCoordinator.shared.show()
     }
 
     @objc private func openAdvancedWindowAction() {

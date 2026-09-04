@@ -67,34 +67,17 @@ targets:
         SWIFT_VERSION: "6.0"
         CODE_SIGNING_ALLOWED: NO
 
-  SpeakerrMenuApp:
+  speakerr:
     type: application
     platform: macOS
     sources:
+      - speakerr
       - SpeakerrApp
     dependencies:
       - target: SpeakerrAudio
         embed: false
       - target: SpeakerrPresentation
         embed: false
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.brimell.speakerr.menu
-        PRODUCT_NAME: SpeakerrMenuApp
-        MACOSX_DEPLOYMENT_TARGET: "15.0"
-        SWIFT_VERSION: "6.0"
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Speakerr
-        INFOPLIST_KEY_LSUIElement: YES
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: Speakerr briefly uses the microphone during calibration to align sound arrival times. Microphone capture is stopped after calibration.
-        ENABLE_HARDENED_RUNTIME: NO
-        CODE_SIGNING_ALLOWED: NO
-
-  speakerr:
-    type: application
-    platform: macOS
-    sources:
-      - speakerr
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.brimell.speakerr
@@ -109,10 +92,10 @@ targets:
     info:
       path: speakerr/Info.plist
       properties:
-        CFBundleShortVersionString: 1.4.0
-        CFBundleVersion: 5
+        CFBundleShortVersionString: "1.4.0"
+        CFBundleVersion: "5"
         LSUIElement: true
-        NSMicrophoneUsageDescription: speakerr needs audio input access to capture audio from BlackHole for EQ processing.
+        NSMicrophoneUsageDescription: speakerr needs audio input access to capture audio from BlackHole for EQ processing and microphone calibration.
     entitlements:
       path: speakerr/speakerr.entitlements
 
@@ -121,25 +104,6 @@ schemes:
     build:
       targets:
         speakerr: all
-    run:
-      config: Release
-  SpeakerrMenuApp:
-    build:
-      targets:
-        SpeakerrMenuApp: all
-    run:
-      config: Debug
-  speakerr-test:
-    build:
-      targets:
-        speakerr-test: all
-    run:
-      config: Debug
-  SpeakerrAudio:
-    build:
-      targets:
-        SpeakerrAudio: all
-        SpeakerrAudioTests: [test]
     test:
       targets:
         - SpeakerrAudioTests

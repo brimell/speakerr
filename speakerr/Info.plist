@@ -17,10 +17,10 @@
 	<key>CFBundleShortVersionString</key>
 	<string>1.4.0</string>
 	<key>CFBundleVersion</key>
-	<integer>5</integer>
+	<string>5</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>speakerr needs audio input access to capture audio from BlackHole for EQ processing.</string>
+	<string>speakerr needs audio input access to capture audio from BlackHole for EQ processing and microphone calibration.</string>
 </dict>
 </plist>

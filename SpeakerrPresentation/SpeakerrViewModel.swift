@@ -95,7 +95,6 @@ public final class SpeakerrViewModel {
         self.microphonePermissionDenied = microphonePermissionDenied
     }
 
-
     public func beginMonitoring() {
         guard pollingTask == nil else { return }
         pollingTask = Task { [weak self] in
@@ -253,6 +252,22 @@ public final class SpeakerrViewModel {
         }
     }
 
+    public func updateMasterEQ(bands: [EQBand]) {
+        Task { await controller.setMasterEQBands(bands) }
+    }
+
+    public func updateMasterEQBypass(_ bypass: Bool) {
+        Task { await controller.setMasterEQBypass(bypass) }
+    }
+
+    public func updateRouteEQ(route: Int, bands: [EQBand]) {
+        Task { await controller.setRouteEQBands(route: route, bands: bands) }
+    }
+
+    public func updateRouteEQBypass(route: Int, bypass: Bool) {
+        Task { await controller.setRouteEQBypass(route: route, bypass: bypass) }
+    }
+
     public func shutdown() async {
         pollingTask?.cancel()
         calibrationTask?.cancel()
@@ -327,5 +342,4 @@ public final class SpeakerrViewModel {
         }
         return "Speakerr could not complete the audio operation."
     }
-
 }

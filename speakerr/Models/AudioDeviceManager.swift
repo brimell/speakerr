@@ -89,6 +89,12 @@ class AudioDeviceManager: ObservableObject {
                 return nil
             }
 
+            if !isInput {
+                if isAggregateDevice(deviceID) || name.contains("Speakerr Temporary Output") {
+                    return nil
+                }
+            }
+
             return AudioDevice(
                 id: deviceID,
                 uid: uid,
@@ -97,6 +103,18 @@ class AudioDeviceManager: ObservableObject {
                 isOutput: !isInput
             )
         }
+    }
+
+    private func isAggregateDevice(_ deviceID: AudioDeviceID) -> Bool {
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioObjectPropertyClass,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var classID: UInt32 = 0
+        var dataSize = UInt32(MemoryLayout<UInt32>.size)
+        let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &dataSize, &classID)
+        return status == noErr && classID == kAudioAggregateDeviceClassID
     }
 
     private func getDeviceName(_ deviceID: AudioDeviceID) -> String? {

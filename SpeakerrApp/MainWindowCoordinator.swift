@@ -3,38 +3,15 @@ import SpeakerrPresentation
 import SwiftUI
 
 @MainActor
-private enum AppModelStore {
-    static let model = SpeakerrViewModel()
-}
-
-final class SpeakerrAppDelegate: NSObject, NSApplicationDelegate {
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        Task { @MainActor in
-            let model = AppModelStore.model
-            model.beginMonitoring()
-            await model.refresh()
-            model.startSavedSessionIfNeeded()
-            MainWindowCoordinator.shared.show(model: model)
-        }
-    }
-
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
-
-    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        Task { @MainActor in
-            await AppModelStore.model.shutdown()
-            sender.reply(toApplicationShouldTerminate: true)
-        }
-        return .terminateLater
-    }
-}
-
-@MainActor
-final class MainWindowCoordinator: NSObject, NSWindowDelegate {
-    static let shared = MainWindowCoordinator()
+public final class MainWindowCoordinator: NSObject, NSWindowDelegate {
+    public static let shared = MainWindowCoordinator()
     private var window: NSWindow?
 
-    func show(model: SpeakerrViewModel) {
+    public func show() {
+        show(model: SpeakerrStore.model)
+    }
+
+    public func show(model: SpeakerrViewModel) {
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApplication.shared.activate(ignoringOtherApps: true)
@@ -59,48 +36,19 @@ final class MainWindowCoordinator: NSObject, NSWindowDelegate {
     }
 }
 
-@main
-struct SpeakerrApp: App {
-    @NSApplicationDelegateAdaptor(SpeakerrAppDelegate.self) private var appDelegate
-    @State private var model = AppModelStore.model
-
-    var body: some Scene {
-        MenuBarExtra("Speakerr", systemImage: menuBarSymbol) {
-            MenuBarContent(model: model)
-        }
-        .menuBarExtraStyle(.menu)
-        .commands {
-            CommandGroup(after: .appSettings) {
-                Button("Recheck Alignment") { model.recheck() }
-                    .keyboardShortcut("r", modifiers: .command)
-                Button("Calibrate Speakers") {
-                    model.isCalibrationPresented = true
-                }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
-            }
-        }
-
-        Settings {
-            SettingsView(model: model)
-                .frame(width: 520, height: 330)
-        }
-    }
-
-    private var menuBarSymbol: String {
-        switch model.presentation.status {
-        case .aligned: "hifispeaker.2.fill"
-        case .calibrating, .preparing: "speaker.wave.2.fill"
-        case .calibrationStale, .alignmentDrifting, .waitingForSpeaker, .audioError: "speaker.badge.exclamationmark.fill"
-        default: "speaker.wave.2"
-        }
-    }
-}
-
-private struct MenuBarContent: View {
+public struct SpeakerrAlignmentMenuView: View {
     @Bindable var model: SpeakerrViewModel
     @Environment(\.openSettings) private var openSettings
 
-    var body: some View {
+    public init() {
+        self.model = SpeakerrStore.model
+    }
+
+    public init(model: SpeakerrViewModel) {
+        self.model = model
+    }
+
+    public var body: some View {
         Section {
             Label(model.presentation.status.rawValue, systemImage: statusSymbol(model.presentation.status))
             if !model.presentation.speakers.isEmpty {
@@ -130,11 +78,6 @@ private struct MenuBarContent: View {
                 .disabled(model.preferences.selectedSpeakerUIDs.count != 2)
         }
         Button("Settings…") { openSettings() }
-        Divider()
-        Button("Quit Speakerr") {
-            NSApplication.shared.terminate(nil)
-        }
-        .keyboardShortcut("q")
     }
 
     private var displayedResidual: Double? {
@@ -145,7 +88,7 @@ private struct MenuBarContent: View {
     }
 }
 
-func statusSymbol(_ status: UserSessionStatus) -> String {
+public func statusSymbol(_ status: UserSessionStatus) -> String {
     switch status {
     case .aligned: "checkmark.circle.fill"
     case .calibrating, .preparing: "arrow.triangle.2.circlepath"
@@ -156,7 +99,7 @@ func statusSymbol(_ status: UserSessionStatus) -> String {
     }
 }
 
-func statusColor(_ status: UserSessionStatus) -> Color {
+public func statusColor(_ status: UserSessionStatus) -> Color {
     switch status {
     case .aligned: .green
     case .calibrating, .preparing: .accentColor

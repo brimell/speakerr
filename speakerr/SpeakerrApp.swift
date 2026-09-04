@@ -3,6 +3,7 @@ import AVFoundation
 import CoreAudio
 import Carbon.HIToolbox
 import AppKit
+import SpeakerrPresentation
 
 final class CrashRelaunchManager {
     private let sessionID = UUID().uuidString
@@ -41,6 +42,9 @@ final class CrashRelaunchManager {
             queue: nil
         ) { _ in
             FileManager.default.createFile(atPath: markerURL.path, contents: Data(), attributes: nil)
+            Task { @MainActor in
+                await SpeakerrStore.model.shutdown()
+            }
         }
 
         let appPath = Bundle.main.bundlePath
@@ -117,10 +121,20 @@ struct SpeakerrApp: App {
 
         Self.configureEngineCallbacks(audioEngine: engine, eqModel: model)
         Self.requestMicrophonePermissionAndStart(audioEngine: engine, eqModel: model)
+
+        Task { @MainActor in
+            let speakerrModel = SpeakerrStore.model
+            speakerrModel.beginMonitoring()
+            await speakerrModel.refresh()
+            speakerrModel.startSavedSessionIfNeeded()
+        }
     }
 
     var body: some Scene {
-        Settings { EmptyView() }
+        Settings {
+            SettingsView(model: SpeakerrStore.model)
+                .frame(width: 520, height: 330)
+        }
     }
 
     private static func requestMicrophonePermissionAndStart(audioEngine: AudioEngine, eqModel: EQModel) {

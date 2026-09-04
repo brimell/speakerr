@@ -18,6 +18,7 @@ struct AppSettings: Codable {
     var selectedCustomPresetID: String? = nil
     var selectedInputDeviceID: Int32? = nil
     var selectedOutputDeviceID: Int32? = nil
+    var selectedOutputDeviceUIDs: [String]? = nil
     var shortcutOutputDeviceUIDs: [String]? = nil
     var normalizeSpectrumAnalyzer: Bool = false
     var preferredIOBufferFrames: Int32 = Int32(AudioEngine.defaultIOBufferFrames)
@@ -40,6 +41,7 @@ struct AppSettings: Codable {
         case selectedCustomPresetID
         case selectedInputDeviceID
         case selectedOutputDeviceID
+        case selectedOutputDeviceUIDs
         case shortcutOutputDeviceUIDs
         case normalizeSpectrumAnalyzer
         case preferredIOBufferFrames
@@ -67,6 +69,7 @@ struct AppSettings: Codable {
         selectedCustomPresetID = try container.decodeIfPresent(String.self, forKey: .selectedCustomPresetID)
         selectedInputDeviceID = try container.decodeIfPresent(Int32.self, forKey: .selectedInputDeviceID)
         selectedOutputDeviceID = try container.decodeIfPresent(Int32.self, forKey: .selectedOutputDeviceID)
+        selectedOutputDeviceUIDs = try container.decodeIfPresent([String].self, forKey: .selectedOutputDeviceUIDs)
         shortcutOutputDeviceUIDs = try container.decodeIfPresent([String].self, forKey: .shortcutOutputDeviceUIDs)
         normalizeSpectrumAnalyzer = try container.decodeIfPresent(Bool.self, forKey: .normalizeSpectrumAnalyzer) ?? false
         preferredIOBufferFrames = try container.decodeIfPresent(Int32.self, forKey: .preferredIOBufferFrames) ?? Int32(AudioEngine.defaultIOBufferFrames)
@@ -92,6 +95,7 @@ struct AppSettings: Codable {
         try container.encode(selectedCustomPresetID, forKey: .selectedCustomPresetID)
         try container.encode(selectedInputDeviceID, forKey: .selectedInputDeviceID)
         try container.encode(selectedOutputDeviceID, forKey: .selectedOutputDeviceID)
+        try container.encode(selectedOutputDeviceUIDs, forKey: .selectedOutputDeviceUIDs)
         try container.encode(shortcutOutputDeviceUIDs, forKey: .shortcutOutputDeviceUIDs)
         try container.encode(normalizeSpectrumAnalyzer, forKey: .normalizeSpectrumAnalyzer)
         try container.encode(preferredIOBufferFrames, forKey: .preferredIOBufferFrames)
@@ -110,7 +114,7 @@ class AppSettingsStore {
     private var cachedEncodedSettings: Data?
 
     init() {
-        loadFromDefaults()
+        _ = loadFromDefaults()
     }
 
     /// Loads the current settings from persistent storage
@@ -123,53 +127,60 @@ class AppSettingsStore {
 
     /// Returns current settings or defaults if none are stored yet.
     func current() -> AppSettings {
-        load() ?? AppSettings()
+        return load() ?? AppSettings()
     }
 
-    /// Updates settings with a mutation closure and persists them
-    func update(_ mutation: (inout AppSettings) -> Void) {
-        var settings = load() ?? AppSettings()
-        mutation(&settings)
-        cachedSettings = settings
-        persistToDefaults(settings)
+    /// Updates the settings using a mutation closure and persists the result
+    func update(_ mutate: (inout AppSettings) -> Void) {
+        var settings = current()
+        mutate(&settings)
+        save(settings)
     }
 
-    /// Replaces all app settings with imported values.
+    /// Replaces the current settings with a new instance
     func replace(with settings: AppSettings) {
-        cachedSettings = settings
-        persistToDefaults(settings)
+        save(settings)
+    }
+
+    /// Resets all settings to their defaults
+    func reset() {
+        let defaults = AppSettings()
+        save(defaults)
     }
 
     // MARK: - Private Methods
 
     private func loadFromDefaults() -> AppSettings? {
-        guard let data = UserDefaults.standard.data(forKey: settingsKey),
-              let decoded = try? JSONDecoder().decode(AppSettings.self, from: data) else {
+        guard let data = UserDefaults.standard.data(forKey: settingsKey) else {
             return nil
         }
-        cachedSettings = decoded
-        cachedEncodedSettings = data
-        return decoded
+
+        do {
+            let decoder = JSONDecoder()
+            let settings = try decoder.decode(AppSettings.self, from: data)
+            cachedSettings = settings
+            cachedEncodedSettings = data
+            return settings
+        } catch {
+            print("AppSettingsStore: Failed to decode settings: \(error.localizedDescription)")
+            return nil
+        }
     }
 
-    private func persistToDefaults(_ settings: AppSettings) {
-        guard let data = try? JSONEncoder().encode(settings) else {
-            print("Failed to encode app settings")
-            return
-        }
+    private func save(_ settings: AppSettings) {
+        do {
+            let encoder = JSONEncoder()
+            let data = try encoder.encode(settings)
 
-        if let cachedEncodedSettings, cachedEncodedSettings == data {
-            return
-        }
+            if let cachedData = cachedEncodedSettings, cachedData == data {
+                return
+            }
 
-        if cachedEncodedSettings == nil,
-           let storedData = UserDefaults.standard.data(forKey: settingsKey),
-           storedData == data {
-            cachedEncodedSettings = storedData
-            return
+            UserDefaults.standard.set(data, forKey: settingsKey)
+            cachedSettings = settings
+            cachedEncodedSettings = data
+        } catch {
+            print("AppSettingsStore: Failed to encode settings: \(error.localizedDescription)")
         }
-
-        cachedEncodedSettings = data
-        UserDefaults.standard.set(data, forKey: settingsKey)
     }
 }

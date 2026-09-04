@@ -2,23 +2,34 @@ import CoreAudio
 import Foundation
 import os
 
-final class AggregateDeviceManager {
-    struct Session {
-        let deviceID: AudioDeviceID
-        let uid: String
-        let sampleRate: Double
-        let channelCounts: [Int]
-        let mainDeviceUID: String
-        let driftCompensatedUIDs: [String]
+public final class AggregateDeviceManager {
+    public struct Session: Sendable {
+        public let deviceID: AudioDeviceID
+        public let uid: String
+        public let sampleRate: Double
+        public let channelCounts: [Int]
+        public let mainDeviceUID: String
+        public let driftCompensatedUIDs: [String]
+
+        public init(deviceID: AudioDeviceID, uid: String, sampleRate: Double, channelCounts: [Int], mainDeviceUID: String, driftCompensatedUIDs: [String]) {
+            self.deviceID = deviceID
+            self.uid = uid
+            self.sampleRate = sampleRate
+            self.channelCounts = channelCounts
+            self.mainDeviceUID = mainDeviceUID
+            self.driftCompensatedUIDs = driftCompensatedUIDs
+        }
     }
 
     private let logger = Logger(subsystem: "com.brimell.speakerr", category: "AggregateDevice")
     private var session: Session?
     private var originalSampleRates: [AudioDeviceID: Double] = [:]
 
+    public init() {}
+
     deinit { destroy() }
 
-    func create(outputs: [OutputDevice]) throws -> Session {
+    public func create(outputs: [OutputDevice]) throws -> Session {
         guard session == nil else { throw AudioRoutingError.alreadyRunning }
         guard outputs.count == 2 else { throw AudioRoutingError.requiresExactlyTwoOutputs }
         guard outputs[0].id != outputs[1].id else { throw AudioRoutingError.duplicateOutput }
@@ -77,7 +88,7 @@ final class AggregateDeviceManager {
         }
     }
 
-    static func makeDescription(outputs: [OutputDevice], uid: String) -> [String: Any] {
+    public static func makeDescription(outputs: [OutputDevice], uid: String) -> [String: Any] {
         let subdevices: [[String: Any]] = outputs.enumerated().map { index, output in
             [
                 "uid": output.id,
@@ -96,7 +107,7 @@ final class AggregateDeviceManager {
         ]
     }
 
-    func destroy() {
+    public func destroy() {
         if let session {
             let status = AudioHardwareDestroyAggregateDevice(session.deviceID)
             if status == noErr {
@@ -108,6 +119,8 @@ final class AggregateDeviceManager {
         }
         restoreSampleRates()
     }
+
+    public var currentSession: Session? { session }
 
     private func selectCommonSampleRate(outputs: [OutputDevice]) throws -> Double {
         let supported = try outputs.map { output in
@@ -125,12 +138,9 @@ final class AggregateDeviceManager {
     private func restoreSampleRates() {
         for (deviceID, rate) in originalSampleRates {
             do {
-                let current = try CoreAudioProperty.double(deviceID, selector: kAudioDevicePropertyNominalSampleRate)
-                if abs(current - rate) > 0.01 {
-                    try CoreAudioProperty.setDouble(deviceID, selector: kAudioDevicePropertyNominalSampleRate, value: rate)
-                }
+                try CoreAudioProperty.setDouble(deviceID, selector: kAudioDevicePropertyNominalSampleRate, value: rate)
             } catch {
-                logger.error("Could not restore device id=\(deviceID, privacy: .public) to \(rate, privacy: .public)Hz: \(error.localizedDescription, privacy: .public)")
+                logger.error("Failed to restore rate device=\(deviceID, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
             }
         }
         originalSampleRates.removeAll()

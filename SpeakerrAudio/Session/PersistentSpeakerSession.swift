@@ -24,6 +24,8 @@ private final class PersistentRenderState: @unchecked Sendable {
     private let transport: StereoRingBuffer
     private let delays: [FractionalDelayLine]
     private let assignments: [OutputChannelAssignment]
+    private let masterEQ: ParametricEQ
+    private let routeEQs: [ParametricEQ]
     private let mode = Atomic<UInt32>(PersistentRenderMode.muted.rawValue)
     private let sourceLeft: UnsafeMutablePointer<Float>
     private let sourceRight: UnsafeMutablePointer<Float>
@@ -44,6 +46,8 @@ private final class PersistentRenderState: @unchecked Sendable {
         self.transport = transport
         delays = try initialDelays.map { try FractionalDelayLine(sampleRate: sampleRate, initialDelayMilliseconds: $0) }
         assignments = OutputChannelMap.assignments(channelCounts: channelCounts)
+        masterEQ = ParametricEQ(sampleRate: sampleRate)
+        routeEQs = channelCounts.map { _ in ParametricEQ(sampleRate: sampleRate) }
         let capacity = Int(Self.maximumFrames)
         sourceLeft = .allocate(capacity: capacity)
         sourceRight = .allocate(capacity: capacity)
@@ -63,6 +67,24 @@ private final class PersistentRenderState: @unchecked Sendable {
     }
 
     func setDelay(index: Int, milliseconds: Double) throws { try delays[index].setDelay(milliseconds: milliseconds) }
+
+    func setMasterEQBands(_ bands: [EQBand]) {
+        masterEQ.setBands(bands)
+    }
+
+    func setMasterEQBypass(_ bypass: Bool) {
+        masterEQ.bypass = bypass
+    }
+
+    func setRouteEQBands(route: Int, bands: [EQBand]) {
+        guard routeEQs.indices.contains(route) else { return }
+        routeEQs[route].setBands(bands)
+    }
+
+    func setRouteEQBypass(route: Int, bypass: Bool) {
+        guard routeEQs.indices.contains(route) else { return }
+        routeEQs[route].bypass = bypass
+    }
 
     func requestEmission(speaker: Int) -> UInt64 {
         emissionSpeaker.store(speaker, ordering: .relaxed)
@@ -95,6 +117,8 @@ private final class PersistentRenderState: @unchecked Sendable {
             if programmePrimed {
                 let fetched = transport.read(left: sourceLeft, right: sourceRight, frameCount: count)
                 if fetched < count { programmePrimed = false }
+                masterEQ.process(buffer: sourceLeft, frameCount: count, channel: 0)
+                masterEQ.process(buffer: sourceRight, frameCount: count, channel: 1)
             }
         } else if currentMode == .calibration {
             renderCalibration(timestamp: timestamp, blockStart: blockStart, blockEnd: blockEnd, count: count)
@@ -106,6 +130,9 @@ private final class PersistentRenderState: @unchecked Sendable {
             if currentMode == .calibration, route != activeEmissionSpeaker {
                 routeLeft[route].initialize(repeating: 0, count: count)
                 routeRight[route].initialize(repeating: 0, count: count)
+            } else if currentMode == .programme {
+                routeEQs[route].process(buffer: routeLeft[route], frameCount: count, channel: 0)
+                routeEQs[route].process(buffer: routeRight[route], frameCount: count, channel: 1)
             }
             delays[route].process(left: UnsafePointer(routeLeft[route]), right: UnsafePointer(routeRight[route]), outputLeft: delayedLeft[route], outputRight: delayedRight[route], frameCount: count)
             let assignment = assignments[route]
@@ -204,6 +231,11 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
     private var rebuilding = false
     private var lifecycleMonitor: CoreAudioDeviceMonitor?
 
+    private var pendingMasterBands: [EQBand]?
+    private var pendingMasterBypass: Bool = false
+    private var pendingRouteBands: [Int: [EQBand]] = [:]
+    private var pendingRouteBypass: [Int: Bool] = [:]
+
     public init(outputs: [OutputDevice], generation: UInt64 = 1, transportCapacityFrames: Int = 44_100) throws {
         guard outputs.count == 2 else { throw AudioRoutingError.requiresExactlyTwoOutputs }
         guard outputs[0].id != outputs[1].id else { throw AudioRoutingError.duplicateOutput }
@@ -217,6 +249,26 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
 
     deinit { stopSynchronously() }
 
+    public func setMasterEQBands(_ bands: [EQBand]) {
+        pendingMasterBands = bands
+        renderState?.setMasterEQBands(bands)
+    }
+
+    public func setMasterEQBypass(_ bypass: Bool) {
+        pendingMasterBypass = bypass
+        renderState?.setMasterEQBypass(bypass)
+    }
+
+    public func setRouteEQBands(route: Int, bands: [EQBand]) {
+        pendingRouteBands[route] = bands
+        renderState?.setRouteEQBands(route: route, bands: bands)
+    }
+
+    public func setRouteEQBypass(route: Int, bypass: Bool) {
+        pendingRouteBypass[route] = bypass
+        renderState?.setRouteEQBypass(route: route, bypass: bypass)
+    }
+
     public func start(calibrationLevel: Double = 0.12) throws {
         guard !running else { return }
         _ = try stateMachine.handle(.prepare)
@@ -225,6 +277,10 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             sampleRate = aggregate.sampleRate
             let chirp = try LogarithmicChirpGenerator(level: calibrationLevel).generate(sampleRate: sampleRate)
             let state = try PersistentRenderState(sampleRate: sampleRate, chirp: chirp.samples, transport: transport, channelCounts: aggregate.channelCounts, delays: delayComponents.map(\.effectiveMilliseconds))
+            if let master = pendingMasterBands { state.setMasterEQBands(master) }
+            state.setMasterEQBypass(pendingMasterBypass)
+            for (route, bands) in pendingRouteBands { state.setRouteEQBands(route: route, bands: bands) }
+            for (route, bypass) in pendingRouteBypass { state.setRouteEQBypass(route: route, bypass: bypass) }
             let unit = try createOutputUnit(aggregate: aggregate)
             self.aggregate = aggregate
             reference = chirp
@@ -385,17 +441,18 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         let request = renderState.requestEmission(speaker: speaker)
         while renderState.emissionHostTime.load(ordering: .acquiring) == 0 || renderState.requestedEmission.load(ordering: .acquiring) != request {
             try checkRenderStatus()
-            try await Task.sleep(for: .milliseconds(10))
+            try await Task.sleep(nanoseconds: 10_000_000)
         }
         let host = renderState.emissionHostTime.load(ordering: .acquiring)
         let startFrame = renderState.emissionStartFrame.load(ordering: .acquiring)
-        let completion = startFrame + Int64(reference.samples.count) + Int64(configuration.maximumAcousticLatencySeconds * sampleRate)
-        try await waitForRenderedFrames(completion)
+        let durationSeconds = Double(reference.samples.count) / sampleRate
+        let waitSeconds = durationSeconds + configuration.maximumAcousticLatencySeconds + 0.1
+        try await Task.sleep(nanoseconds: UInt64(max(0, waitSeconds) * 1_000_000_000))
         let captured = try microphone.snapshot()
         let scheduledInput = try captured.sampleIndex(atHostTime: host)
-        let preSearch = Int(0.02 * sampleRate)
+        let preSearch = Int((0.005 * sampleRate).rounded())
         let sliceStart = max(0, Int(floor(scheduledInput)) - preSearch)
-        let searchEnd = Int(ceil(scheduledInput)) + Int(configuration.maximumAcousticLatencySeconds * sampleRate)
+        let searchEnd = min(captured.samples.count, Int(ceil(scheduledInput + (configuration.maximumAcousticLatencySeconds + durationSeconds) * sampleRate)))
         let sliceEnd = min(captured.samples.count, searchEnd + reference.samples.count)
         guard sliceEnd - sliceStart >= reference.samples.count else { throw DelayEstimatorError.insufficientRecording }
         let recording = Array(captured.samples[sliceStart..<sliceEnd])
@@ -427,7 +484,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
     private func waitForRenderedFrames(_ target: Int64) async throws {
         while (renderState?.renderedFrames.load(ordering: .acquiring) ?? target) < target {
             try Task.checkCancellation()
-            try await Task.sleep(for: .milliseconds(10))
+            try await Task.sleep(nanoseconds: 10_000_000)
         }
     }
 
@@ -558,25 +615,33 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         for (index, component) in delayComponents.enumerated() {
             try? renderState?.setDelay(index: index, milliseconds: component.effectiveMilliseconds)
         }
-        _ = try? stateMachine.handle(.invalidate(reason))
-        if let deviceID = aggregateDeviceID { try? lifecycleMonitor?.watchAggregate(deviceID: deviceID) }
-        if let previousProgrammeInput { _ = try? attachProgrammeInput(previousProgrammeInput) }
+        if let previousProgrammeInput {
+            do {
+                _ = try attachProgrammeInput(previousProgrammeInput)
+            } catch {
+                _ = try? stateMachine.handle(.outputUnavailable("programme attach failed: \(error.localizedDescription)"))
+            }
+        }
     }
 
     private func stopSynchronously() {
         stopLifecycleMonitoring()
-        programmeCapture?.stop(); programmeCapture = nil
-        microphoneCapture?.stop(); microphoneCapture = nil
-        if let outputUnit {
-            AudioOutputUnitStop(outputUnit); AudioUnitUninitialize(outputUnit); AudioComponentInstanceDispose(outputUnit)
-            self.outputUnit = nil
-        }
-        renderState = nil; reference = nil; aggregate = nil
-        aggregateManager.destroy(); running = false
+        tearDownRunningResources()
         _ = try? stateMachine.handle(.stop)
     }
 }
 
-private let speakerrPersistentOutputCallback: AURenderCallback = { refCon, _, timestamp, _, frames, ioData in
-    Unmanaged<PersistentSpeakerSession>.fromOpaque(refCon).takeUnretainedValue().render(timestamp: timestamp, frameCount: frames, ioData: ioData)
+private func speakerrPersistentOutputCallback(
+    inRefCon: UnsafeMutableRawPointer,
+    ioActionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
+    inTimeStamp: UnsafePointer<AudioTimeStamp>,
+    inBusNumber: UInt32,
+    inNumberFrames: UInt32,
+    ioData: UnsafeMutablePointer<AudioBufferList>?
+) -> OSStatus {
+    Unmanaged<PersistentSpeakerSession>.fromOpaque(inRefCon).takeUnretainedValue().render(
+        timestamp: inTimeStamp,
+        frameCount: inNumberFrames,
+        ioData: ioData
+    )
 }

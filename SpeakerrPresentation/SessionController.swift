@@ -28,6 +28,10 @@ public protocol SpeakerSessionControlling: Sendable {
     func recheck(inputUID: String, configuration: CalibrationExperimentConfiguration) async throws -> CalibrationPassMeasurements
     func applyDynamicCorrection(residualMilliseconds: Double) async throws
     func setManualDelay(outputUID: String, milliseconds: Double) async throws
+    func setMasterEQBands(_ bands: [EQBand]) async
+    func setMasterEQBypass(_ bypass: Bool) async
+    func setRouteEQBands(route: Int, bands: [EQBand]) async
+    func setRouteEQBypass(route: Int, bypass: Bool) async
 }
 
 public enum SessionControllerError: LocalizedError, Sendable, Equatable {
@@ -55,6 +59,11 @@ public actor CoreAudioSpeakerSessionController: SpeakerSessionControlling {
     private var isProgrammeAttached = false
     private var systemRoute: SystemOutputRoute?
 
+    private var masterEQBands: [EQBand]?
+    private var masterEQBypass: Bool = false
+    private var routeEQBands: [Int: [EQBand]] = [:]
+    private var routeEQBypass: [Int: Bool] = [:]
+
     public init() {}
 
     public func snapshot() throws -> SessionControllerSnapshot {
@@ -79,6 +88,11 @@ public actor CoreAudioSpeakerSessionController: SpeakerSessionControlling {
             return output
         }
         let created = try PersistentSpeakerSession(outputs: selectedOutputs)
+        if let master = masterEQBands { created.setMasterEQBands(master) }
+        created.setMasterEQBypass(masterEQBypass)
+        for (route, bands) in routeEQBands { created.setRouteEQBands(route: route, bands: bands) }
+        for (route, bypass) in routeEQBypass { created.setRouteEQBypass(route: route, bypass: bypass) }
+
         do {
             try created.start(calibrationLevel: calibrationLevel)
             try created.startLifecycleMonitoring()
@@ -129,6 +143,26 @@ public actor CoreAudioSpeakerSessionController: SpeakerSessionControlling {
         guard let session, let index = session.outputUIDs.firstIndex(of: outputUID) else { throw SessionControllerError.outputUnavailable(outputUID) }
         let old = session.status().delays[index]
         try session.setDelayComponents(index: index, value: DelayComponents(manual: milliseconds, calibration: old.calibration, dynamicCorrection: old.dynamicCorrection))
+    }
+
+    public func setMasterEQBands(_ bands: [EQBand]) {
+        masterEQBands = bands
+        session?.setMasterEQBands(bands)
+    }
+
+    public func setMasterEQBypass(_ bypass: Bool) {
+        masterEQBypass = bypass
+        session?.setMasterEQBypass(bypass)
+    }
+
+    public func setRouteEQBands(route: Int, bands: [EQBand]) {
+        routeEQBands[route] = bands
+        session?.setRouteEQBands(route: route, bands: bands)
+    }
+
+    public func setRouteEQBypass(route: Int, bypass: Bool) {
+        routeEQBypass[route] = bypass
+        session?.setRouteEQBypass(route: route, bypass: bypass)
     }
 
     private func resolveInput(uid: String) throws -> InputDevice {

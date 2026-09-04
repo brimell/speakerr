@@ -34,6 +34,10 @@ private actor MockSpeakerSessionController: SpeakerSessionControlling {
     func recheck(inputUID: String, configuration: CalibrationExperimentConfiguration) async throws -> CalibrationPassMeasurements { throw CancellationError() }
     func applyDynamicCorrection(residualMilliseconds: Double) {}
     func setManualDelay(outputUID: String, milliseconds: Double) {}
+    func setMasterEQBands(_ bands: [EQBand]) {}
+    func setMasterEQBypass(_ bypass: Bool) {}
+    func setRouteEQBands(route: Int, bands: [EQBand]) {}
+    func setRouteEQBypass(route: Int, bypass: Bool) {}
 }
 
 @MainActor

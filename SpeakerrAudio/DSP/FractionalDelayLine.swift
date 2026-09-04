@@ -51,7 +51,7 @@ public final class FractionalDelayLine: @unchecked Sendable {
         currentDelayFrames = Double(bitPattern: targetDelayBits.load(ordering: .relaxed))
     }
 
-    func process(left: UnsafePointer<Float>, right: UnsafePointer<Float>, outputLeft: UnsafeMutablePointer<Float>, outputRight: UnsafeMutablePointer<Float>, frameCount: Int) {
+    public func process(left: UnsafePointer<Float>, right: UnsafePointer<Float>, outputLeft: UnsafeMutablePointer<Float>, outputRight: UnsafeMutablePointer<Float>, frameCount: Int) {
         guard frameCount > 0 else { return }
         let target = Double(bitPattern: targetDelayBits.load(ordering: .relaxed))
         let delayStep = (target - currentDelayFrames) / Double(frameCount)
