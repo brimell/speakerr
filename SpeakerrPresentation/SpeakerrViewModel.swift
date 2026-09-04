@@ -3,6 +3,22 @@ import Foundation
 import Observation
 import SpeakerrAudio
 
+public protocol MicrophonePermissionProviding: Sendable {
+    func requestPermission() async -> Bool
+}
+
+public struct SystemMicrophonePermissionProvider: MicrophonePermissionProviding {
+    public init() {}
+
+    public func requestPermission() async -> Bool {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized: true
+        case .notDetermined: await AVCaptureDevice.requestAccess(for: .audio)
+        default: false
+        }
+    }
+}
+
 @MainActor
 @Observable
 public final class SpeakerrPreferences {
@@ -63,14 +79,16 @@ public final class SpeakerrViewModel {
 
     public let preferences: SpeakerrPreferences
     private let controller: any SpeakerSessionControlling
+    private let microphonePermissionProvider: any MicrophonePermissionProviding
     private var pollingTask: Task<Void, Never>?
     private var calibrationTask: Task<Void, Never>?
     private var latestRecheckResidual: Double?
     private var isPaused = false
     private var attemptedSavedSessionStart = false
 
-    public init(controller: any SpeakerSessionControlling = CoreAudioSpeakerSessionController(), preferences: SpeakerrPreferences? = nil, initialPresentation: SpeakerrPresentationState = .init(), initialCalibrationOutcome: CalibrationOutcome = .none, microphonePermissionDenied: Bool = false) {
+    public init(controller: any SpeakerSessionControlling = CoreAudioSpeakerSessionController(), preferences: SpeakerrPreferences? = nil, microphonePermissionProvider: any MicrophonePermissionProviding = SystemMicrophonePermissionProvider(), initialPresentation: SpeakerrPresentationState = .init(), initialCalibrationOutcome: CalibrationOutcome = .none, microphonePermissionDenied: Bool = false) {
         self.controller = controller
+        self.microphonePermissionProvider = microphonePermissionProvider
         self.preferences = preferences ?? SpeakerrPreferences()
         presentation = initialPresentation
         calibrationOutcome = initialCalibrationOutcome
@@ -166,7 +184,7 @@ public final class SpeakerrViewModel {
         isBusy = true
         calibrationTask = Task { [weak self] in
             guard let self else { return }
-            guard await requestMicrophoneAccess() else {
+            guard await microphonePermissionProvider.requestPermission() else {
                 microphonePermissionDenied = true
                 isBusy = false
                 return
@@ -310,11 +328,4 @@ public final class SpeakerrViewModel {
         return "Speakerr could not complete the audio operation."
     }
 
-    private func requestMicrophoneAccess() async -> Bool {
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
-        case .authorized: true
-        case .notDetermined: await AVCaptureDevice.requestAccess(for: .audio)
-        default: false
-        }
-    }
 }
