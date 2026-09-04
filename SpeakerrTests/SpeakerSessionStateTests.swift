@@ -19,6 +19,12 @@ final class SpeakerSessionStateTests: XCTestCase {
         XCTAssertEqual(try machine.handle(.stop), .idle)
     }
 
+    func testAlignedSessionCanRecalibrateWithoutRebuild() throws {
+        var machine = SpeakerSessionStateMachine(state: .aligned)
+        XCTAssertEqual(try machine.handle(.beginCalibration), .calibrating)
+        XCTAssertEqual(try machine.handle(.calibrationSucceeded), .aligned)
+    }
+
     func testInvalidTransitionIsRejected() {
         var machine = SpeakerSessionStateMachine()
         XCTAssertThrowsError(try machine.handle(.calibrationSucceeded))

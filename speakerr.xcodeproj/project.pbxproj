@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		087A6F6671D4F85BF7D7C6A9 /* CalibrationSignal.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFEB06FAE4DC2C4EACA5119A /* CalibrationSignal.swift */; };
+		1509DC3A4A498231914E2BFB /* PersistentSpeakerSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3AFFC7AA962F79CE32BC9B5 /* PersistentSpeakerSession.swift */; };
 		15B8A2CBB3329A61134FA6AE /* AudioDeviceDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = B29F4025CFCFC333D13AF228 /* AudioDeviceDiscovery.swift */; };
 		16A21E5D3C823E01F1844089 /* DelayEstimatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99564CD41CA243CC751410E2 /* DelayEstimatorTests.swift */; };
 		171C8F0E076D688D0F63FA65 /* EQModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C1BC859501A9CBE59DE3C15 /* EQModel.swift */; };
@@ -142,6 +143,7 @@
 		E0902EC52E6C1C5F43F7B996 /* SpeakerSessionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerSessionState.swift; sourceTree = "<group>"; };
 		E20119903E936255D09B60A9 /* AcousticCalibrationSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcousticCalibrationSession.swift; sourceTree = "<group>"; };
 		E68E1642F47346513B53F355 /* CoreAudioProperty.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreAudioProperty.swift; sourceTree = "<group>"; };
+		F3AFFC7AA962F79CE32BC9B5 /* PersistentSpeakerSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistentSpeakerSession.swift; sourceTree = "<group>"; };
 		F46CA8CBAC6BF673DC8D6384 /* ContinuousMicrophoneCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContinuousMicrophoneCapture.swift; sourceTree = "<group>"; };
 		F9F54614D9BFBE2B231615D1 /* TransientSignalGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransientSignalGenerator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -194,6 +196,7 @@
 		7833E827048E776993A7850C /* Session */ = {
 			isa = PBXGroup;
 			children = (
+				F3AFFC7AA962F79CE32BC9B5 /* PersistentSpeakerSession.swift */,
 				E0902EC52E6C1C5F43F7B996 /* SpeakerSessionState.swift */,
 			);
 			path = Session;
@@ -488,6 +491,7 @@
 				625973D16B8B927880EA5579 /* InteractiveDelayCommand.swift in Sources */,
 				5CB0EC3CD9091A437593966C /* NormalizedCrossCorrelationEstimator.swift in Sources */,
 				743BECEB540CBB94310DBF39 /* OutputChannelMap.swift in Sources */,
+				1509DC3A4A498231914E2BFB /* PersistentSpeakerSession.swift in Sources */,
 				AC26AFBAE4275A873BEB0B26 /* SpeakerSessionState.swift in Sources */,
 				288F294A077D581E043C57E1 /* StereoRingBuffer.swift in Sources */,
 				4A874E65BC4CEF428AE7C694 /* SystemAudioCapture.swift in Sources */,

@@ -101,9 +101,15 @@ public final class SystemAudioCapture: @unchecked Sendable {
         running = true
     }
 
+    public func pause() {
+        guard running, let unit else { return }
+        AudioOutputUnitStop(unit)
+        running = false
+    }
+
     public func stop() {
         guard let unit else { return }
-        if running { AudioOutputUnitStop(unit) }
+        pause()
         AudioUnitUninitialize(unit)
         AudioComponentInstanceDispose(unit)
         self.unit = nil
