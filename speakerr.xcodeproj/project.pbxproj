@@ -3,128 +3,220 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
-		15F132AC9067AD02135BE53C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4C0AF6B0B38D96090AD4C380 /* Assets.xcassets */; };
-		1E48CE5399622798326732E4 /* AudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6A097FC8AA074A9C2DB3A90 /* AudioEngine.swift */; };
-		24E3AA5A5372279C027A868B /* AutoEQManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B05A2248530D9686BF6F7124 /* AutoEQManager.swift */; };
-		2A2494488E18410C6D27F795 /* EQModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E8A60E655B672C965CAE226 /* EQModel.swift */; };
-		2F8C0C1985B0255E7CB26D51 /* EQSliderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E78ED980AAED8A73537EC45E /* EQSliderView.swift */; };
-		412E933C0BCF56E5DCA7AA27 /* AutoEQView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAA9C36C360A279CD47D5823 /* AutoEQView.swift */; };
-		4469824EEEA88F4E660DF7AB /* AudioDeviceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C444BFFBC1DBCB0D06DD4304 /* AudioDeviceManager.swift */; };
-		7C9A31E8B4F245D1920A6E11 /* SettingsTransfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C9A31E8B4F245D1920A6E12 /* SettingsTransfer.swift */; };
-		AA11BB22CC33DD44EE55FF66 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF67 /* UpdateChecker.swift */; };
-		8D8D801DB1C99A988241BF5B /* BiquadFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51FD6D0200D7D0FE3101D83A /* BiquadFilter.swift */; };
-		A1B2C3D4E5F60718293A4B5C /* AppSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5D /* AppSettingsStore.swift */; };
-		B44A1A949BC2A06490A7617D /* LaunchAtLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07907DEB12E0717D58D55A19 /* LaunchAtLogin.swift */; };
-		B4E9A50D6F86F805FBF71FC5 /* EQPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03EC78AF207C511ECF968539 /* EQPreset.swift */; };
-		D4EE2DFEEB5854168EF0A0D9 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71D1309559DC169C09D7F42 /* ContentView.swift */; };
-		DDE2D0ED56A330F4F2279D60 /* SpeakerrApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B42DA36A1F8703E28C5084AF /* SpeakerrApp.swift */; };
-		TC0001234567890ABCDEF001 /* TrayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = TC0001234567890ABCDEF002 /* TrayController.swift */; };
-		E0DDFD321979092D60ABC259 /* DeviceProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DDABD38567914BE03CA937E /* DeviceProfile.swift */; };
+		171C8F0E076D688D0F63FA65 /* EQModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C1BC859501A9CBE59DE3C15 /* EQModel.swift */; };
+		210C62D7AD8854CC3B13A74A /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB7B6EB861770579C447D381 /* ContentView.swift */; };
+		37751239FD26B9812D2949A8 /* TrayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDD433EC4DCD1D2C3D93C781 /* TrayController.swift */; };
+		4323B17208A4EFF886F2D489 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 546BC26B76E1C930ECA04CF4 /* UpdateChecker.swift */; };
+		4AC0BAFB15FA7E9DFD4F35B5 /* SpeakerrAudio.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A77BDA4EABB08BDE64B162FE /* SpeakerrAudio.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		4F553B51216C23A6695D36E9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 250EDA5950C8D3BF7F091DF1 /* Assets.xcassets */; };
+		4FF98A3C38401CD9C1704E3D /* BiquadFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C9E73298AC49BB8789CC15B /* BiquadFilter.swift */; };
+		5103136088234660945D9DBE /* LaunchAtLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2A21DE043B97BF2DC1BE3A /* LaunchAtLogin.swift */; };
+		56E711DC2278BC8CC9B7D10C /* SettingsTransfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16332FF47332BF0E7312553F /* SettingsTransfer.swift */; };
+		689CD76A34468AFB1DF0DB4D /* EQSliderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FFE4ED5FE9EDA2C58B46737 /* EQSliderView.swift */; };
+		707595D7306F84C2143A6052 /* DeviceProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEF12421A6CF2B59FC1EB81A /* DeviceProfile.swift */; };
+		75CF7189CB4579AECD4FD9E4 /* AudioDeviceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AD4D811C3A9D024EF39C807 /* AudioDeviceManager.swift */; };
+		7D86A9D21EC7925960FFDE71 /* SpeakerrAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEFC0DAB40F8753C50B6C68C /* SpeakerrAudio.swift */; };
+		7E8289D86522382E31D2749E /* SpeakerrApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28AA84616A4ABF1FA0BB7379 /* SpeakerrApp.swift */; };
+		A5E7AB755C21FBE45DAFA617 /* SpeakerrAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A77BDA4EABB08BDE64B162FE /* SpeakerrAudio.framework */; };
+		A6B31BD631F392F04738E1EB /* AutoEQManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D47B14F2013EFA8EDCEC785F /* AutoEQManager.swift */; };
+		B00D74FBE7E4ACCC1063021F /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9BB2B54EF319FB3F1220EBD /* main.swift */; };
+		C2B804F283C337F966295B51 /* AppSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA0304B167FC787CD22EC4EF /* AppSettingsStore.swift */; };
+		C42AA1AD124777C22D7C6EB1 /* SpeakerrAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A77BDA4EABB08BDE64B162FE /* SpeakerrAudio.framework */; };
+		C882735CB77628443D29770D /* AutoEQView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8CAA56E2B1B4D826096FB6D /* AutoEQView.swift */; };
+		C942D5DBFDFFCB13C345A123 /* AudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0591E47F6C12D9A6FA469E80 /* AudioEngine.swift */; };
+		CA0FAE0DEBC7B3DD11474FA8 /* SpeakerrAudioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C87676BE39F43B850BEA94 /* SpeakerrAudioTests.swift */; };
+		E0EC240A68C55CA11C3EDB41 /* EQPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = D74799EA4C66147BADA0EA13 /* EQPreset.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		9D7A0E7C72FAB1801377976C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8C75DEA00BBA052242AB1024 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E444BE038696F9AC18FA8DF0;
+			remoteInfo = SpeakerrAudio;
+		};
+		A7E99AB5C11455487807C0A2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8C75DEA00BBA052242AB1024 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E444BE038696F9AC18FA8DF0;
+			remoteInfo = SpeakerrAudio;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		88D4B22753EC769C96C36C57 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				4AC0BAFB15FA7E9DFD4F35B5 /* SpeakerrAudio.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
-		03EC78AF207C511ECF968539 /* EQPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EQPreset.swift; sourceTree = "<group>"; };
-		07907DEB12E0717D58D55A19 /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
-		0DDABD38567914BE03CA937E /* DeviceProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceProfile.swift; sourceTree = "<group>"; };
-		4C0AF6B0B38D96090AD4C380 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		5008C2369D4FCA33AE27B502 /* speakerr.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = speakerr.entitlements; sourceTree = "<group>"; };
-		51FD6D0200D7D0FE3101D83A /* BiquadFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiquadFilter.swift; sourceTree = "<group>"; };
-		5E8A60E655B672C965CAE226 /* EQModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EQModel.swift; sourceTree = "<group>"; };
-		7C9A31E8B4F245D1920A6E12 /* SettingsTransfer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTransfer.swift; sourceTree = "<group>"; };
-		AA11BB22CC33DD44EE55FF67 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
-		A1B2C3D4E5F60718293A4B5D /* AppSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsStore.swift; sourceTree = "<group>"; };
-		B05A2248530D9686BF6F7124 /* AutoEQManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoEQManager.swift; sourceTree = "<group>"; };
-		B42DA36A1F8703E28C5084AF /* SpeakerrApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerrApp.swift; sourceTree = "<group>"; };
-		C444BFFBC1DBCB0D06DD4304 /* AudioDeviceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDeviceManager.swift; sourceTree = "<group>"; };
-		CAA9C36C360A279CD47D5823 /* AutoEQView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoEQView.swift; sourceTree = "<group>"; };
-		D235C00C8D24E5AD3050FF87 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		D6A097FC8AA074A9C2DB3A90 /* AudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngine.swift; sourceTree = "<group>"; };
-		E78ED980AAED8A73537EC45E /* EQSliderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EQSliderView.swift; sourceTree = "<group>"; };
-		F71D1309559DC169C09D7F42 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		TC0001234567890ABCDEF002 /* TrayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrayController.swift; sourceTree = "<group>"; };
-		F9EACF6F7A3FF42A540BFADB /* speakerr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = speakerr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0591E47F6C12D9A6FA469E80 /* AudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngine.swift; sourceTree = "<group>"; };
+		16332FF47332BF0E7312553F /* SettingsTransfer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTransfer.swift; sourceTree = "<group>"; };
+		19B924486601C5A00B639DF8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		1C9E73298AC49BB8789CC15B /* BiquadFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiquadFilter.swift; sourceTree = "<group>"; };
+		250EDA5950C8D3BF7F091DF1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		28AA84616A4ABF1FA0BB7379 /* SpeakerrApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerrApp.swift; sourceTree = "<group>"; };
+		35C87676BE39F43B850BEA94 /* SpeakerrAudioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerrAudioTests.swift; sourceTree = "<group>"; };
+		546BC26B76E1C930ECA04CF4 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
+		5C1BC859501A9CBE59DE3C15 /* EQModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EQModel.swift; sourceTree = "<group>"; };
+		5FFE4ED5FE9EDA2C58B46737 /* EQSliderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EQSliderView.swift; sourceTree = "<group>"; };
+		70F7AC1B2B885FB830DAD103 /* speakerr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = speakerr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		92EB616F18AC034433C267EF /* speakerr-test */ = {isa = PBXFileReference; includeInIndex = 0; path = "speakerr-test"; sourceTree = BUILT_PRODUCTS_DIR; };
+		9AD4D811C3A9D024EF39C807 /* AudioDeviceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDeviceManager.swift; sourceTree = "<group>"; };
+		A537631D313AF47D1EFBF490 /* speakerr.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = speakerr.entitlements; sourceTree = "<group>"; };
+		A5C5B57543952E0AEEE32150 /* SpeakerrAudioTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SpeakerrAudioTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A77BDA4EABB08BDE64B162FE /* SpeakerrAudio.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = SpeakerrAudio.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB7B6EB861770579C447D381 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		B9BB2B54EF319FB3F1220EBD /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		CA0304B167FC787CD22EC4EF /* AppSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsStore.swift; sourceTree = "<group>"; };
+		CDD433EC4DCD1D2C3D93C781 /* TrayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrayController.swift; sourceTree = "<group>"; };
+		CF2A21DE043B97BF2DC1BE3A /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
+		D47B14F2013EFA8EDCEC785F /* AutoEQManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoEQManager.swift; sourceTree = "<group>"; };
+		D74799EA4C66147BADA0EA13 /* EQPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EQPreset.swift; sourceTree = "<group>"; };
+		D8CAA56E2B1B4D826096FB6D /* AutoEQView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoEQView.swift; sourceTree = "<group>"; };
+		DEF12421A6CF2B59FC1EB81A /* DeviceProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceProfile.swift; sourceTree = "<group>"; };
+		DEFC0DAB40F8753C50B6C68C /* SpeakerrAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerrAudio.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFrameworksBuildPhase section */
+		A3F963487954342B9AE66FB0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C42AA1AD124777C22D7C6EB1 /* SpeakerrAudio.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D9B5A154A0C0AEB76C9C1BA4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A5E7AB755C21FBE45DAFA617 /* SpeakerrAudio.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
 /* Begin PBXGroup section */
-		13C159E44B26A6D615F03CE4 /* speakerr */ = {
+		4AAD5538A6EBEF9FC358255A /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				4C0AF6B0B38D96090AD4C380 /* Assets.xcassets */,
-				F71D1309559DC169C09D7F42 /* ContentView.swift */,
-				D235C00C8D24E5AD3050FF87 /* Info.plist */,
-				5008C2369D4FCA33AE27B502 /* speakerr.entitlements */,
-				B42DA36A1F8703E28C5084AF /* SpeakerrApp.swift */,
-				TC0001234567890ABCDEF002 /* TrayController.swift */,
-				9CD4B4FB674D012E7B251319 /* Audio */,
-				97C1BCE090899A4DC70EE5AC /* Models */,
-				CC6973476E463BA86F29C27F /* Views */,
-			);
-			path = speakerr;
-			sourceTree = "<group>";
-		};
-		332CE17EC83C1BAE83AF0544 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				F9EACF6F7A3FF42A540BFADB /* speakerr.app */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		97C1BCE090899A4DC70EE5AC /* Models */ = {
-			isa = PBXGroup;
-			children = (
-				A1B2C3D4E5F60718293A4B5D /* AppSettingsStore.swift */,
-				C444BFFBC1DBCB0D06DD4304 /* AudioDeviceManager.swift */,
-				B05A2248530D9686BF6F7124 /* AutoEQManager.swift */,
-				0DDABD38567914BE03CA937E /* DeviceProfile.swift */,
-				5E8A60E655B672C965CAE226 /* EQModel.swift */,
-				03EC78AF207C511ECF968539 /* EQPreset.swift */,
-				07907DEB12E0717D58D55A19 /* LaunchAtLogin.swift */,
-				7C9A31E8B4F245D1920A6E12 /* SettingsTransfer.swift */,
-				AA11BB22CC33DD44EE55FF67 /* UpdateChecker.swift */,
-			);
-			path = Models;
-			sourceTree = "<group>";
-		};
-		9CD4B4FB674D012E7B251319 /* Audio */ = {
-			isa = PBXGroup;
-			children = (
-				D6A097FC8AA074A9C2DB3A90 /* AudioEngine.swift */,
-				51FD6D0200D7D0FE3101D83A /* BiquadFilter.swift */,
-			);
-			path = Audio;
-			sourceTree = "<group>";
-		};
-		CC6973476E463BA86F29C27F /* Views */ = {
-			isa = PBXGroup;
-			children = (
-				CAA9C36C360A279CD47D5823 /* AutoEQView.swift */,
-				E78ED980AAED8A73537EC45E /* EQSliderView.swift */,
+				D8CAA56E2B1B4D826096FB6D /* AutoEQView.swift */,
+				5FFE4ED5FE9EDA2C58B46737 /* EQSliderView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
 		};
-		F9A5552073C5FA8268A3E765 = {
+		6990E10F87DE442C6AABD515 /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				13C159E44B26A6D615F03CE4 /* speakerr */,
-				332CE17EC83C1BAE83AF0544 /* Products */,
+				CA0304B167FC787CD22EC4EF /* AppSettingsStore.swift */,
+				9AD4D811C3A9D024EF39C807 /* AudioDeviceManager.swift */,
+				D47B14F2013EFA8EDCEC785F /* AutoEQManager.swift */,
+				DEF12421A6CF2B59FC1EB81A /* DeviceProfile.swift */,
+				5C1BC859501A9CBE59DE3C15 /* EQModel.swift */,
+				D74799EA4C66147BADA0EA13 /* EQPreset.swift */,
+				CF2A21DE043B97BF2DC1BE3A /* LaunchAtLogin.swift */,
+				16332FF47332BF0E7312553F /* SettingsTransfer.swift */,
+				546BC26B76E1C930ECA04CF4 /* UpdateChecker.swift */,
 			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		7A93D9A0D05EDAB2C4CD2E06 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				92EB616F18AC034433C267EF /* speakerr-test */,
+				70F7AC1B2B885FB830DAD103 /* speakerr.app */,
+				A77BDA4EABB08BDE64B162FE /* SpeakerrAudio.framework */,
+				A5C5B57543952E0AEEE32150 /* SpeakerrAudioTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8AE058E9053B42124617A3BB = {
+			isa = PBXGroup;
+			children = (
+				B60150C0A64618C037346FAC /* speakerr */,
+				BFE1615EB83DE4C2AC24DABA /* SpeakerrAudio */,
+				B69A83E6D78C8705ADCB8363 /* SpeakerrCLI */,
+				B6E8C9FF8B3835C0D33E93CB /* SpeakerrTests */,
+				7A93D9A0D05EDAB2C4CD2E06 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B60150C0A64618C037346FAC /* speakerr */ = {
+			isa = PBXGroup;
+			children = (
+				250EDA5950C8D3BF7F091DF1 /* Assets.xcassets */,
+				AB7B6EB861770579C447D381 /* ContentView.swift */,
+				19B924486601C5A00B639DF8 /* Info.plist */,
+				A537631D313AF47D1EFBF490 /* speakerr.entitlements */,
+				28AA84616A4ABF1FA0BB7379 /* SpeakerrApp.swift */,
+				CDD433EC4DCD1D2C3D93C781 /* TrayController.swift */,
+				F656D801271EA85A81D2D195 /* Audio */,
+				6990E10F87DE442C6AABD515 /* Models */,
+				4AAD5538A6EBEF9FC358255A /* Views */,
+			);
+			path = speakerr;
+			sourceTree = "<group>";
+		};
+		B69A83E6D78C8705ADCB8363 /* SpeakerrCLI */ = {
+			isa = PBXGroup;
+			children = (
+				B9BB2B54EF319FB3F1220EBD /* main.swift */,
+			);
+			path = SpeakerrCLI;
+			sourceTree = "<group>";
+		};
+		B6E8C9FF8B3835C0D33E93CB /* SpeakerrTests */ = {
+			isa = PBXGroup;
+			children = (
+				35C87676BE39F43B850BEA94 /* SpeakerrAudioTests.swift */,
+			);
+			path = SpeakerrTests;
+			sourceTree = "<group>";
+		};
+		BFE1615EB83DE4C2AC24DABA /* SpeakerrAudio */ = {
+			isa = PBXGroup;
+			children = (
+				DEFC0DAB40F8753C50B6C68C /* SpeakerrAudio.swift */,
+			);
+			path = SpeakerrAudio;
+			sourceTree = "<group>";
+		};
+		F656D801271EA85A81D2D195 /* Audio */ = {
+			isa = PBXGroup;
+			children = (
+				0591E47F6C12D9A6FA469E80 /* AudioEngine.swift */,
+				1C9E73298AC49BB8789CC15B /* BiquadFilter.swift */,
+			);
+			path = Audio;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		3726484049C26C4BCDA7CB4C /* speakerr */ = {
+		82309914A7387F6441FE95B0 /* speakerr */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 03DCA9856C318300459A9670 /* Build configuration list for PBXNativeTarget "speakerr" */;
+			buildConfigurationList = EAACD920A1071199C430AA7C /* Build configuration list for PBXNativeTarget "speakerr" */;
 			buildPhases = (
-				A97B8C235348D6CB4855CD7C /* Sources */,
-				15FAFACBA946DF0A81F61698 /* Resources */,
+				FA3F2B0A9D1843AC336457F3 /* Sources */,
+				7E8D2F8C1BEA40B65D9E42CC /* Resources */,
 			);
 			buildRules = (
 			);
@@ -134,155 +226,174 @@
 			packageProductDependencies = (
 			);
 			productName = speakerr;
-			productReference = F9EACF6F7A3FF42A540BFADB /* speakerr.app */;
+			productReference = 70F7AC1B2B885FB830DAD103 /* speakerr.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A94F18FB47C35F85F977D755 /* SpeakerrAudioTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FDBD17BA49F30B5F43B960A1 /* Build configuration list for PBXNativeTarget "SpeakerrAudioTests" */;
+			buildPhases = (
+				BF5DBEED645AC613766807F1 /* Sources */,
+				D9B5A154A0C0AEB76C9C1BA4 /* Frameworks */,
+				88D4B22753EC769C96C36C57 /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				503D03006C7FC03D8B810E50 /* PBXTargetDependency */,
+			);
+			name = SpeakerrAudioTests;
+			packageProductDependencies = (
+			);
+			productName = SpeakerrAudioTests;
+			productReference = A5C5B57543952E0AEEE32150 /* SpeakerrAudioTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		C39BE27A8340598DEA5A8966 /* speakerr-test */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AD572EF39D933D47B3E33B6B /* Build configuration list for PBXNativeTarget "speakerr-test" */;
+			buildPhases = (
+				99649DC034D90639F599F0DC /* Sources */,
+				A3F963487954342B9AE66FB0 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DBA1221B758AF45B92FC8F9D /* PBXTargetDependency */,
+			);
+			name = "speakerr-test";
+			packageProductDependencies = (
+			);
+			productName = "speakerr-test";
+			productReference = 92EB616F18AC034433C267EF /* speakerr-test */;
+			productType = "com.apple.product-type.tool";
+		};
+		E444BE038696F9AC18FA8DF0 /* SpeakerrAudio */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F56C93BE9207020B378CDDA9 /* Build configuration list for PBXNativeTarget "SpeakerrAudio" */;
+			buildPhases = (
+				A35E598D35A83E51AD1F693D /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SpeakerrAudio;
+			packageProductDependencies = (
+			);
+			productName = SpeakerrAudio;
+			productReference = A77BDA4EABB08BDE64B162FE /* SpeakerrAudio.framework */;
+			productType = "com.apple.product-type.framework";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		930E4B7EF493EE3A9FF1BDD2 /* Project object */ = {
+		8C75DEA00BBA052242AB1024 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2620;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+				};
 			};
-			buildConfigurationList = C9A80F3E8D167B251085E6A0 /* Build configuration list for PBXProject "speakerr" */;
-			compatibilityVersion = "Xcode 14.0";
+			buildConfigurationList = 06B606B244FBC22FF12B126D /* Build configuration list for PBXProject "speakerr" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				Base,
 				en,
 			);
-			mainGroup = F9A5552073C5FA8268A3E765;
+			mainGroup = 8AE058E9053B42124617A3BB;
 			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 7A93D9A0D05EDAB2C4CD2E06 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				3726484049C26C4BCDA7CB4C /* speakerr */,
+				E444BE038696F9AC18FA8DF0 /* SpeakerrAudio */,
+				C39BE27A8340598DEA5A8966 /* speakerr-test */,
+				A94F18FB47C35F85F977D755 /* SpeakerrAudioTests */,
+				82309914A7387F6441FE95B0 /* speakerr */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		15FAFACBA946DF0A81F61698 /* Resources */ = {
+		7E8D2F8C1BEA40B65D9E42CC /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				15F132AC9067AD02135BE53C /* Assets.xcassets in Resources */,
+				4F553B51216C23A6695D36E9 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A97B8C235348D6CB4855CD7C /* Sources */ = {
+		99649DC034D90639F599F0DC /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A1B2C3D4E5F60718293A4B5C /* AppSettingsStore.swift in Sources */,
-				4469824EEEA88F4E660DF7AB /* AudioDeviceManager.swift in Sources */,
-				1E48CE5399622798326732E4 /* AudioEngine.swift in Sources */,
-				24E3AA5A5372279C027A868B /* AutoEQManager.swift in Sources */,
-				412E933C0BCF56E5DCA7AA27 /* AutoEQView.swift in Sources */,
-				8D8D801DB1C99A988241BF5B /* BiquadFilter.swift in Sources */,
-				D4EE2DFEEB5854168EF0A0D9 /* ContentView.swift in Sources */,
-				E0DDFD321979092D60ABC259 /* DeviceProfile.swift in Sources */,
-				2A2494488E18410C6D27F795 /* EQModel.swift in Sources */,
-				B4E9A50D6F86F805FBF71FC5 /* EQPreset.swift in Sources */,
-				2F8C0C1985B0255E7CB26D51 /* EQSliderView.swift in Sources */,
-				B44A1A949BC2A06490A7617D /* LaunchAtLogin.swift in Sources */,
-				7C9A31E8B4F245D1920A6E11 /* SettingsTransfer.swift in Sources */,
-				DDE2D0ED56A330F4F2279D60 /* SpeakerrApp.swift in Sources */,
-				TC0001234567890ABCDEF001 /* TrayController.swift in Sources */,
-				AA11BB22CC33DD44EE55FF66 /* UpdateChecker.swift in Sources */,
+				B00D74FBE7E4ACCC1063021F /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A35E598D35A83E51AD1F693D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7D86A9D21EC7925960FFDE71 /* SpeakerrAudio.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BF5DBEED645AC613766807F1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CA0FAE0DEBC7B3DD11474FA8 /* SpeakerrAudioTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FA3F2B0A9D1843AC336457F3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C2B804F283C337F966295B51 /* AppSettingsStore.swift in Sources */,
+				75CF7189CB4579AECD4FD9E4 /* AudioDeviceManager.swift in Sources */,
+				C942D5DBFDFFCB13C345A123 /* AudioEngine.swift in Sources */,
+				A6B31BD631F392F04738E1EB /* AutoEQManager.swift in Sources */,
+				C882735CB77628443D29770D /* AutoEQView.swift in Sources */,
+				4FF98A3C38401CD9C1704E3D /* BiquadFilter.swift in Sources */,
+				210C62D7AD8854CC3B13A74A /* ContentView.swift in Sources */,
+				707595D7306F84C2143A6052 /* DeviceProfile.swift in Sources */,
+				171C8F0E076D688D0F63FA65 /* EQModel.swift in Sources */,
+				E0EC240A68C55CA11C3EDB41 /* EQPreset.swift in Sources */,
+				689CD76A34468AFB1DF0DB4D /* EQSliderView.swift in Sources */,
+				5103136088234660945D9DBE /* LaunchAtLogin.swift in Sources */,
+				56E711DC2278BC8CC9B7D10C /* SettingsTransfer.swift in Sources */,
+				7E8289D86522382E31D2749E /* SpeakerrApp.swift in Sources */,
+				37751239FD26B9812D2949A8 /* TrayController.swift in Sources */,
+				4323B17208A4EFF886F2D489 /* UpdateChecker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		503D03006C7FC03D8B810E50 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E444BE038696F9AC18FA8DF0 /* SpeakerrAudio */;
+			targetProxy = A7E99AB5C11455487807C0A2 /* PBXContainerItemProxy */;
+		};
+		DBA1221B758AF45B92FC8F9D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E444BE038696F9AC18FA8DF0 /* SpeakerrAudio */;
+			targetProxy = 9D7A0E7C72FAB1801377976C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
-		46FA447B1427D724636FC03D /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				AUTOMATION_APPLE_EVENTS = NO;
-				CODE_SIGN_ENTITLEMENTS = speakerr/speakerr.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = QQ62NJFH8G;
-				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
-				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
-				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
-				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
-				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
-				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
-				INFOPLIST_FILE = speakerr/Info.plist;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.brimell.speakerr;
-				PRODUCT_NAME = speakerr;
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
-				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
-				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
-				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
-				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
-				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
-				SDKROOT = macosx;
-				SWIFT_VERSION = 5.9;
-			};
-			name = Debug;
-		};
-		577AB1D171FFB35CB67F4D7F /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				AUTOMATION_APPLE_EVENTS = NO;
-				CODE_SIGN_ENTITLEMENTS = speakerr/speakerr.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = QQ62NJFH8G;
-				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
-				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
-				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
-				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
-				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
-				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
-				INFOPLIST_FILE = speakerr/Info.plist;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.brimell.speakerr;
-				PRODUCT_NAME = speakerr;
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
-				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
-				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
-				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
-				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
-				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
-				SDKROOT = macosx;
-				SWIFT_VERSION = 5.9;
-			};
-			name = Release;
-		};
-		E9D85B85E64B0D3649975C36 /* Release */ = {
+		0F4A7AD888436C5B875EAF69 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -316,11 +427,9 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -329,19 +438,35 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};
-		EA1871C6DD805EAB82B413EF /* Debug */ = {
+		1F18BC3F4536231FE2714601 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.brimell.speakerr.test;
+				PRODUCT_NAME = "speakerr-test";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		353DB065D977D50FE58E6E74 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -375,11 +500,9 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -394,41 +517,216 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
 		};
+		5F90F7B06015C4ABAB069EC2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = speakerr/speakerr.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				INFOPLIST_FILE = speakerr/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.brimell.speakerr;
+				PRODUCT_NAME = speakerr;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		8CC7C6C3B7C224AEAFB1D5F9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.brimell.speakerr.audio-tests";
+				PRODUCT_NAME = SpeakerrAudioTests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		96DC78F40B9E6317388589EE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.brimell.speakerr.audio-tests";
+				PRODUCT_NAME = SpeakerrAudioTests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		9A2B0B7DBE5958145CDC49F1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.brimell.speakerr.test;
+				PRODUCT_NAME = "speakerr-test";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		B02BA49AE4C8CA49B8FE9DA5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_IDENTITY = "";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.brimell.speakerr.audio;
+				PRODUCT_NAME = SpeakerrAudio;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.0;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
+		};
+		CC9C78E654E5E6649A291688 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = speakerr/speakerr.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				INFOPLIST_FILE = speakerr/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.brimell.speakerr;
+				PRODUCT_NAME = speakerr;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		ED98DFB52B71727F5911CC93 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_IDENTITY = "";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.brimell.speakerr.audio;
+				PRODUCT_NAME = SpeakerrAudio;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.0;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		03DCA9856C318300459A9670 /* Build configuration list for PBXNativeTarget "speakerr" */ = {
+		06B606B244FBC22FF12B126D /* Build configuration list for PBXProject "speakerr" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				46FA447B1427D724636FC03D /* Debug */,
-				577AB1D171FFB35CB67F4D7F /* Release */,
+				353DB065D977D50FE58E6E74 /* Debug */,
+				0F4A7AD888436C5B875EAF69 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		C9A80F3E8D167B251085E6A0 /* Build configuration list for PBXProject "speakerr" */ = {
+		AD572EF39D933D47B3E33B6B /* Build configuration list for PBXNativeTarget "speakerr-test" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				EA1871C6DD805EAB82B413EF /* Debug */,
-				E9D85B85E64B0D3649975C36 /* Release */,
+				1F18BC3F4536231FE2714601 /* Debug */,
+				9A2B0B7DBE5958145CDC49F1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		EAACD920A1071199C430AA7C /* Build configuration list for PBXNativeTarget "speakerr" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5F90F7B06015C4ABAB069EC2 /* Debug */,
+				CC9C78E654E5E6649A291688 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F56C93BE9207020B378CDDA9 /* Build configuration list for PBXNativeTarget "SpeakerrAudio" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B02BA49AE4C8CA49B8FE9DA5 /* Debug */,
+				ED98DFB52B71727F5911CC93 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		FDBD17BA49F30B5F43B960A1 /* Build configuration list for PBXNativeTarget "SpeakerrAudioTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8CC7C6C3B7C224AEAFB1D5F9 /* Debug */,
+				96DC78F40B9E6317388589EE /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = 930E4B7EF493EE3A9FF1BDD2 /* Project object */;
+	rootObject = 8C75DEA00BBA052242AB1024 /* Project object */;
 }

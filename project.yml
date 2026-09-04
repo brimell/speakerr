@@ -2,10 +2,53 @@ name: speakerr
 options:
   bundleIdPrefix: com.brimell
   deploymentTarget:
-    macOS: "13.0"
-  xcodeVersion: "15.0"
+    macOS: "15.0"
+  xcodeVersion: "26.0"
 
 targets:
+  SpeakerrAudio:
+    type: framework
+    platform: macOS
+    sources:
+      - SpeakerrAudio
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.brimell.speakerr.audio
+        PRODUCT_NAME: SpeakerrAudio
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        SWIFT_VERSION: "6.0"
+        CODE_SIGNING_ALLOWED: NO
+
+  speakerr-test:
+    type: tool
+    platform: macOS
+    sources:
+      - SpeakerrCLI
+    dependencies:
+      - target: SpeakerrAudio
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.brimell.speakerr.test
+        PRODUCT_NAME: speakerr-test
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        SWIFT_VERSION: "6.0"
+        CODE_SIGNING_ALLOWED: NO
+
+  SpeakerrAudioTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - SpeakerrTests
+    dependencies:
+      - target: SpeakerrAudio
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.brimell.speakerr.audio-tests
+        PRODUCT_NAME: SpeakerrAudioTests
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        SWIFT_VERSION: "6.0"
+        CODE_SIGNING_ALLOWED: NO
+
   speakerr:
     type: application
     platform: macOS
@@ -15,7 +58,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.brimell.speakerr
         PRODUCT_NAME: speakerr
-        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_FILE: speakerr/Info.plist
         CODE_SIGN_ENTITLEMENTS: speakerr/speakerr.entitlements
@@ -26,3 +69,13 @@ targets:
       path: speakerr/Info.plist
     entitlements:
       path: speakerr/speakerr.entitlements
+
+schemes:
+  SpeakerrAudio:
+    build:
+      targets:
+        SpeakerrAudio: all
+        SpeakerrAudioTests: [test]
+    test:
+      targets:
+        - SpeakerrAudioTests
