@@ -190,6 +190,8 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
     private var reference: CalibrationSignal?
     private var emissionSequence = 0
     private var running = false
+    private var rebuilding = false
+    private var lifecycleMonitor: CoreAudioDeviceMonitor?
 
     public init(outputs: [OutputDevice], generation: UInt64 = 1, transportCapacityFrames: Int = 44_100) throws {
         guard outputs.count == 2 else { throw AudioRoutingError.requiresExactlyTwoOutputs }
@@ -319,6 +321,19 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         _ = try? stateMachine.handle(.invalidate(reason))
     }
 
+    public func startLifecycleMonitoring() throws {
+        try installLifecycleMonitor()
+    }
+
+    public func stopLifecycleMonitoring() {
+        lifecycleMonitor?.stop()
+        lifecycleMonitor = nil
+    }
+
+    public func rebuild(reason: CalibrationStaleReason) throws {
+        try performRebuild(reason: reason)
+    }
+
     public func stop() { stopSynchronously() }
 
     public func status() -> PersistentSessionStatus {
@@ -422,7 +437,110 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         return renderState.render(timestamp: timestamp, ioData: ioData, frameCount: frameCount)
     }
 
+    private func installLifecycleMonitor() throws {
+        guard lifecycleMonitor == nil else { return }
+        let monitor = try CoreAudioDeviceMonitor(selectedUIDs: outputUIDs) { [weak self] event in
+            self?.handleLifecycleEvent(event)
+        }
+        try monitor.start()
+        if let deviceID = aggregateDeviceID { try? monitor.watchAggregate(deviceID: deviceID) }
+        lifecycleMonitor = monitor
+    }
+
+    private func handleLifecycleEvent(_ event: AudioLifecycleEvent) {
+        switch event {
+        case .devicesChanged(let changes, _):
+            for change in changes { applyLifecycleChange(change) }
+        case .aggregateDestroyed:
+            try? performRebuild(reason: .routeRebuilt)
+        case .systemSleep:
+            invalidate(.systemWoke)
+        case .systemWake:
+            try? performRebuild(reason: .systemWoke)
+        case .defaultOutputChanged:
+            break
+        }
+    }
+
+    private func applyLifecycleChange(_ change: DeviceLifecycleChange) {
+        switch change {
+        case .unchanged:
+            break
+        case .disconnected:
+            markOutputsUnavailable(reason: .deviceReconnected)
+        case .reconnected:
+            try? performRebuild(reason: .deviceReconnected)
+        case .sampleRateChanged:
+            try? performRebuild(reason: .sampleRateChanged)
+        case .channelLayoutChanged:
+            try? performRebuild(reason: .deviceSetChanged)
+        }
+    }
+
+    private func markOutputsUnavailable(reason: CalibrationStaleReason) {
+        guard !rebuilding else { return }
+        rebuilding = true
+        defer { rebuilding = false }
+        tearDownRunningResources()
+        generation &+= 1
+        calibrationSnapshot = nil
+        _ = try? stateMachine.handle(.outputUnavailable("selected output disconnected"))
+        _ = reason
+    }
+
+    private func tearDownRunningResources() {
+        programmeCapture?.stop()
+        microphoneCapture?.stop(); microphoneCapture = nil
+        if let outputUnit {
+            AudioOutputUnitStop(outputUnit); AudioUnitUninitialize(outputUnit); AudioComponentInstanceDispose(outputUnit)
+            self.outputUnit = nil
+        }
+        renderState = nil; reference = nil
+        aggregateManager.destroy(); aggregate = nil
+        running = false
+    }
+
+    /// Idempotent: repeated device notifications for the same underlying event
+    /// are safe to coalesce into a single rebuild because this always tears
+    /// down first and resolves fresh AudioObjectIDs from stable UIDs.
+    private func performRebuild(reason: CalibrationStaleReason) throws {
+        guard !rebuilding else { return }
+        rebuilding = true
+        defer { rebuilding = false }
+
+        let previousProgrammeInput = programmeCapture?.device
+        let priorState = stateMachine.state
+        tearDownRunningResources()
+
+        let discovered = try AudioDeviceDiscovery().outputDevices()
+        let byUID = Dictionary(uniqueKeysWithValues: discovered.map { ($0.id, $0) })
+        guard outputUIDs.allSatisfy({ byUID[$0] != nil }) else {
+            generation &+= 1
+            calibrationSnapshot = nil
+            _ = try? stateMachine.handle(.outputUnavailable("one or more selected outputs are not currently connected"))
+            return
+        }
+        outputs = outputUIDs.map { byUID[$0]! }
+        generation &+= 1
+        calibrationSnapshot = nil
+
+        if case .rebuilding = priorState {} else { _ = try? stateMachine.handle(.beginRebuild) }
+        do {
+            try start()
+        } catch {
+            _ = try? stateMachine.handle(.outputUnavailable("rebuild failed: \(error.localizedDescription)"))
+            throw error
+        }
+        for (index, component) in delayComponents.enumerated() {
+            try? renderState?.setDelay(index: index, milliseconds: component.effectiveMilliseconds)
+        }
+        _ = try? stateMachine.handle(.invalidate(reason))
+        if let deviceID = aggregateDeviceID { try? lifecycleMonitor?.watchAggregate(deviceID: deviceID) }
+        if let previousProgrammeInput { _ = try? attachProgrammeInput(previousProgrammeInput) }
+    }
+
     private func stopSynchronously() {
+        stopLifecycleMonitoring()
         programmeCapture?.stop(); programmeCapture = nil
         microphoneCapture?.stop(); microphoneCapture = nil
         if let outputUnit {

@@ -51,6 +51,13 @@ final class SpeakerSessionStateTests: XCTestCase {
         XCTAssertEqual(DeviceLifecycleComparison.compare(previous: previous, current: ["a": .init(uid: "a", objectID: 10, sampleRate: 48_000, channelCount: 2)], selectedUIDs: ["a"]), [.sampleRateChanged(uid: "a", old: 44_100, new: 48_000)])
     }
 
+    func testRebuildCanReprepareWithoutPassingThroughIdle() throws {
+        var machine = SpeakerSessionStateMachine(state: .rebuilding)
+        XCTAssertEqual(try machine.handle(.prepare), .preparing)
+        XCTAssertEqual(try machine.handle(.prepared), .ready)
+        XCTAssertEqual(try machine.handle(.invalidate(.deviceReconnected)), .calibrationStale(.deviceReconnected))
+    }
+
     func testDuplicateNotificationsCoalesce() {
         var coalescer = NotificationCoalescer(intervalNanoseconds: 100)
         coalescer.receive(at: 0)

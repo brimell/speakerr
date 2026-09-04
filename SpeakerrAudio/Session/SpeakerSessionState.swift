@@ -56,7 +56,7 @@ public struct SpeakerSessionStateMachine: Sendable {
         let next: SpeakerSessionState
         switch (state, event) {
         case (_, .stop): next = .idle
-        case (.idle, .prepare): next = .preparing
+        case (.idle, .prepare), (.rebuilding, .prepare): next = .preparing
         case (.preparing, .prepared): next = .ready
         case (.ready, .beginCalibration), (.aligned, .beginCalibration), (.calibrationStale, .beginCalibration): next = .calibrating
         case (.calibrating, .calibrationSucceeded): next = .aligned
