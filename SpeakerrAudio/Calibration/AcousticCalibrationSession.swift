@@ -251,7 +251,7 @@ public final class AcousticCalibrationSession: @unchecked Sendable {
 
     private func makeEvents(sampleRate: Double) -> [ScheduledEmissionState] {
         var result: [ScheduledEmissionState] = []
-        for pass in 0..<configuration.maximumPasses {
+        for pass in 0..<configuration.totalScheduledPasses {
             let start = configuration.passStartSeconds(pass)
             for sequence in 0..<configuration.eventsPerPass {
                 result.append(ScheduledEmissionState(

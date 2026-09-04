@@ -26,6 +26,8 @@ private enum CLIError: LocalizedError {
 @main
 struct SpeakerrTest {
     static func main() async {
+        setbuf(stdout, nil)
+        setbuf(stderr, nil)
         do {
             let arguments = Array(CommandLine.arguments.dropFirst())
             switch arguments.first {
@@ -52,6 +54,7 @@ struct SpeakerrTest {
           speakerr-test play [--output-a <uid>] [--output-b <uid>]
           speakerr-test calibrate [--output-a <uid>] [--output-b <uid>] [--input <uid>]
                                  [--gain <0.01...0.5>] [--verbose]
+                                 [--stability]
                                  [--save-diagnostics <directory>]
         """)
     }
@@ -153,6 +156,7 @@ struct SpeakerrTest {
         var gain = 0.12
         var verbose = false
         var diagnosticsDirectory: String?
+        var stability = false
     }
 
     private static func calibrate(arguments: [String]) async throws {
@@ -181,6 +185,7 @@ struct SpeakerrTest {
 
         var configuration = CalibrationExperimentConfiguration()
         configuration.level = options.gain
+        if options.stability { configuration.stabilityMeasurementOffsetsSeconds = [0, 30, 60, 120, 300] }
         let session = try AcousticCalibrationSession(outputs: [outputA, outputB], input: input, configuration: configuration)
         var completedPasses: [CalibrationPassMeasurements] = []
         var residuals: [Double] = []
@@ -244,6 +249,16 @@ struct SpeakerrTest {
                   \(outputA.name): manual +\(String(format: "%.2f", session.manualDelays[0])) ms, calibration +\(String(format: "%.2f", compensation.calibrationDelayA)) ms
                   \(outputB.name): manual +\(String(format: "%.2f", session.manualDelays[1])) ms, calibration +\(String(format: "%.2f", compensation.calibrationDelayB)) ms
                 """)
+            }
+
+            if success, options.stability {
+                print("\nStarting fixed-compensation stability measurements (no further delay changes).")
+                for (index, offset) in configuration.stabilityMeasurementOffsetsSeconds.enumerated() {
+                    let measured = try await session.waitForPass(configuration.maximumPasses + index)
+                    completedPasses.append(measured)
+                    print("\nStability t=\(Int(offset)) s")
+                    printPass(measured, outputs: [outputA, outputB], verbose: options.verbose)
+                }
             }
 
             if let path = options.diagnosticsDirectory {
@@ -361,6 +376,11 @@ struct SpeakerrTest {
             let option = arguments[index]
             if option == "--verbose" {
                 result.verbose = true
+                index += 1
+                continue
+            }
+            if option == "--stability" {
+                result.stability = true
                 index += 1
                 continue
             }

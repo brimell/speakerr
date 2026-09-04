@@ -12,6 +12,7 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
     public var maximumAcousticLatencySeconds: Double
     public var targetResidualMilliseconds: Double
     public var level: Double
+    public var stabilityMeasurementOffsetsSeconds: [Double]
 
     public init(
         preRollSeconds: Double = 0.8,
@@ -24,7 +25,8 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
         maximumRetriesPerSpeaker: Int = 2,
         maximumAcousticLatencySeconds: Double = 0.8,
         targetResidualMilliseconds: Double = 2,
-        level: Double = 0.12
+        level: Double = 0.12,
+        stabilityMeasurementOffsetsSeconds: [Double] = []
     ) {
         self.preRollSeconds = preRollSeconds
         self.chirpDurationSeconds = chirpDurationSeconds
@@ -37,6 +39,7 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
         self.maximumAcousticLatencySeconds = maximumAcousticLatencySeconds
         self.targetResidualMilliseconds = targetResidualMilliseconds
         self.level = level
+        self.stabilityMeasurementOffsetsSeconds = stabilityMeasurementOffsetsSeconds
     }
 
     public func validate() throws {
@@ -48,7 +51,9 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
               measurementsPerSpeaker > 0,
               maximumPasses > 0,
               maximumRetriesPerSpeaker >= 0,
-              maximumAcousticLatencySeconds > 0 else {
+              maximumAcousticLatencySeconds > 0,
+              stabilityMeasurementOffsetsSeconds.allSatisfy({ $0 >= 0 }),
+              stabilityMeasurementOffsetsSeconds == stabilityMeasurementOffsetsSeconds.sorted() else {
             throw CalibrationSessionError.invalidConfiguration
         }
         guard level > 0, level <= 0.5 else { throw CalibrationSignalError.invalidLevel }
@@ -57,14 +62,20 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
     public var eventsPerPass: Int { 2 * (measurementsPerSpeaker + maximumRetriesPerSpeaker) }
 
     public func passStartSeconds(_ pass: Int) -> Double {
-        preRollSeconds + Double(pass) * (Double(eventsPerPass) * intervalSeconds + passGapSeconds)
+        let passStride = Double(eventsPerPass) * intervalSeconds + passGapSeconds
+        if pass < maximumPasses { return preRollSeconds + Double(pass) * passStride }
+        let stabilityIndex = pass - maximumPasses
+        return preRollSeconds + Double(maximumPasses) * passStride + stabilityMeasurementOffsetsSeconds[stabilityIndex]
     }
 
     public var maximumSessionSeconds: Double {
         // Analysis runs while the streams remain alive. Reserve bounded headroom so a
         // slower debug build cannot overrun capture while writing diagnostics.
-        passStartSeconds(maximumPasses - 1) + Double(eventsPerPass) * intervalSeconds + postRollSeconds + 15
+        let finalPass = maximumPasses + stabilityMeasurementOffsetsSeconds.count - 1
+        return passStartSeconds(finalPass) + Double(eventsPerPass) * intervalSeconds + postRollSeconds + 15
     }
+
+    public var totalScheduledPasses: Int { maximumPasses + stabilityMeasurementOffsetsSeconds.count }
 }
 
 public struct CalibrationEmission: Sendable, Equatable, Codable {

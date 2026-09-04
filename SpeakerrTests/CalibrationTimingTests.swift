@@ -32,4 +32,13 @@ final class CalibrationTimingTests: XCTestCase {
         configuration = CalibrationExperimentConfiguration(intervalSeconds: 0.5)
         XCTAssertThrowsError(try configuration.validate())
     }
+
+    func testStabilityPassesUseRequestedOffsets() throws {
+        let configuration = CalibrationExperimentConfiguration(stabilityMeasurementOffsetsSeconds: [0, 30, 60, 120, 300])
+        try configuration.validate()
+        XCTAssertEqual(configuration.totalScheduledPasses, 8)
+        let baseline = configuration.passStartSeconds(configuration.maximumPasses)
+        XCTAssertEqual(configuration.passStartSeconds(configuration.maximumPasses + 1) - baseline, 30, accuracy: 0.0001)
+        XCTAssertEqual(configuration.passStartSeconds(configuration.maximumPasses + 4) - baseline, 300, accuracy: 0.0001)
+    }
 }
