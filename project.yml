@@ -79,7 +79,7 @@ targets:
         embed: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.brimell.Speakerr
+        PRODUCT_BUNDLE_IDENTIFIER: com.brimell.speakerr.menu
         PRODUCT_NAME: Speakerr
         MACOSX_DEPLOYMENT_TARGET: "15.0"
         SWIFT_VERSION: "6.0"
