@@ -1,0 +1,2238 @@
+import SwiftUI
+import CoreAudio
+import UniformTypeIdentifiers
+import AppKit
+
+enum ContentViewLayout {
+    case compact
+    case full
+}
+
+struct ContentView: View {
+    let layout: ContentViewLayout
+    let advancedWindowID: String?
+    let onOpenAdvancedWindow: (() -> Void)?
+
+    @EnvironmentObject var audioEngine: AudioEngine
+    @EnvironmentObject var eqModel: EQModel
+    @EnvironmentObject var updateChecker: UpdateChecker
+    @Environment(\.openWindow) private var openWindow
+    @StateObject private var deviceManager = AudioDeviceManager()
+    @StateObject private var presetManager = PresetManager()
+
+    @State private var selectedInputID: AudioDeviceID?
+    @State private var shortcutOutputDeviceUIDs: [String] = []
+    @State private var showingSavePreset = false
+    @State private var showingAutoEQ = false
+    @State private var showingEQImportPicker = false
+    @State private var showingHelp = false
+    @State private var showingEQImportError = false
+    @State private var eqImportErrorMessage = ""
+    @State private var showingSettingsImportConfirmation = false
+    @State private var showingSettingsTransferMessage = false
+    @State private var settingsTransferMessage = ""
+    @State private var pendingSettingsImportURL: URL?
+    @State private var newPresetName = ""
+    @State private var didInitialStartup = false
+    @State private var normalizeSpectrumAnalyzer = false
+    @State private var preferredIOBufferFrames: UInt32 = AudioEngine.defaultIOBufferFrames
+    @State private var ringBufferCapacityMultiplier: UInt32 = AudioEngine.defaultRingBufferCapacityMultiplier
+    @State private var latencyTargetMultiplier: UInt32 = AudioEngine.defaultLatencyTargetMultiplier
+    @StateObject private var launchAtLogin = LaunchAtLogin()
+    private let settingsStore = AppSettingsStore.shared
+    private let autoEQManager = AutoEQManager.shared
+
+    private let compactMenuWidth: CGFloat = 640
+
+    private var isCompactLayout: Bool {
+        layout == .compact
+    }
+
+    init(layout: ContentViewLayout = .full, advancedWindowID: String? = nil, onOpenAdvancedWindow: (() -> Void)? = nil) {
+        self.layout = layout
+        self.advancedWindowID = advancedWindowID
+        self.onOpenAdvancedWindow = onOpenAdvancedWindow
+    }
+
+    var body: some View {
+        Group {
+            if isCompactLayout {
+                compactLayoutBody
+            } else {
+                advancedLayoutBody
+            }
+        }
+        .font(.system(size: 14))
+        .onAppear {
+            loadShortcutOutputTargets()
+            loadSpectrumAnalyzerSettings()
+            loadLatencySettings()
+            setupDeviceChangeCallback()
+            eqModel.resolvePresetSelection(using: presetManager.customPresets)
+            syncEQToEngine()
+            if !didInitialStartup {
+                autoSelectDevicesAndStart()
+                updateChecker.startPeriodicChecks()
+                didInitialStartup = true
+            }
+        }
+        .onChange(of: normalizeSpectrumAnalyzer) { _ in
+            persistSpectrumAnalyzerSettings()
+        }
+        .onChange(of: preferredIOBufferFrames) { _ in
+            applyLatencySettingsToEngine()
+            persistLatencySettings()
+        }
+        .onChange(of: ringBufferCapacityMultiplier) { _ in
+            if latencyTargetMultiplier > ringBufferCapacityMultiplier {
+                latencyTargetMultiplier = ringBufferCapacityMultiplier
+            }
+            applyLatencySettingsToEngine()
+            persistLatencySettings()
+        }
+        .onChange(of: latencyTargetMultiplier) { _ in
+            applyLatencySettingsToEngine()
+            persistLatencySettings()
+        }
+        .onReceive(audioEngine.$selectedInputDeviceID) { newDeviceID in
+            if selectedInputID != newDeviceID {
+                selectedInputID = newDeviceID
+            }
+        }
+        .onChange(of: eqModel.parametricBands) { newValue in
+            audioEngine.setBands(newValue)
+        }
+        .onChange(of: eqModel.isEnabled) { newValue in
+            audioEngine.setBypass(!newValue)
+        }
+        .onChange(of: eqModel.isEQFiltersEnabled) { newValue in
+            audioEngine.setEQFiltersEnabled(newValue)
+        }
+        .onChange(of: eqModel.preGain) { newValue in
+            audioEngine.setPreGain(newValue)
+        }
+        .onChange(of: eqModel.outputGain) { newValue in
+            audioEngine.setOutputGain(newValue)
+        }
+        .onChange(of: eqModel.limiterEnabled) { newValue in
+            audioEngine.setLimiterEnabled(newValue)
+        }
+        .onChange(of: eqModel.limiterCeilingDB) { newValue in
+            audioEngine.setLimiterCeilingDB(newValue)
+        }
+        .onChange(of: eqModel.autoStopClippingEnabled) { newValue in
+            audioEngine.setAutoStopClippingEnabled(newValue)
+        }
+        .onChange(of: eqModel.volume) { newValue in
+            audioEngine.setVolume(newValue)
+        }
+        .onChange(of: presetManager.customPresets) { newPresets in
+            eqModel.resolvePresetSelection(using: newPresets)
+        }
+        .sheet(isPresented: $showingSavePreset) {
+            savePresetSheet
+        }
+        .fileImporter(
+            isPresented: $showingEQImportPicker,
+            allowedContentTypes: [.plainText, .text],
+            allowsMultipleSelection: false,
+            onCompletion: importEQFile
+        )
+        .alert("Import Failed", isPresented: $showingEQImportError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(eqImportErrorMessage)
+        }
+        .alert("Import Settings Backup?", isPresented: $showingSettingsImportConfirmation) {
+            Button("Cancel", role: .cancel) {
+                pendingSettingsImportURL = nil
+            }
+            Button("Import", role: .destructive) {
+                guard let sourceURL = pendingSettingsImportURL else { return }
+                performSettingsImport(from: sourceURL)
+                pendingSettingsImportURL = nil
+            }
+        } message: {
+            Text("This replaces current app settings, custom presets, and device profiles.")
+        }
+        .alert("Settings Transfer", isPresented: $showingSettingsTransferMessage) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(settingsTransferMessage)
+        }
+    }
+
+    private var compactLayoutBody: some View {
+        mainContent
+            .padding(14)
+            .frame(width: compactMenuWidth)
+    }
+
+    private var advancedLayoutBody: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            mainContent
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .frame(minWidth: 700, minHeight: 620)
+    }
+
+    private var mainContent: some View {
+        VStack(spacing: isCompactLayout ? 12 : 16) {
+            header
+
+            Divider()
+
+            responseGraph
+
+            spectrumGraph
+
+            eqSliders
+
+            preGainControl
+
+            // Volume slider for HDMI/devices without hardware volume
+            if audioEngine.outputDeviceNeedsVolumeControl {
+                volumeControl
+            }
+
+            if isCompactLayout {
+                compactOutputControl
+            }
+
+            if !isCompactLayout {
+                Divider()
+
+                presetControls
+
+                Divider()
+
+                deviceControls
+
+                Divider()
+            }
+
+            footer
+        }
+    }
+
+    private var compactOutputControl: some View {
+        HStack {
+            Text("Output")
+                .foregroundColor(.secondary)
+                .frame(width: 50, alignment: .leading)
+
+            Picker("", selection: selectedOutputBinding) {
+                Text("Select...").tag(nil as AudioDeviceID?)
+                ForEach(deviceManager.outputDevices) { device in
+                    Text(device.name).tag(device.id as AudioDeviceID?)
+                }
+            }
+            .labelsHidden()
+            .help("Choose the output device")
+
+            Button {
+                refreshOutputDevices()
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.borderless)
+            .help("Refresh output devices")
+        }
+    }
+
+    private func setupDeviceChangeCallback() {
+        audioEngine.onOutputDeviceChanged = { _, uid, name in
+            DispatchQueue.main.async {
+                eqModel.onDeviceChanged(deviceUID: uid, deviceName: name)
+                eqModel.resolvePresetSelection(using: presetManager.customPresets)
+                audioEngine.setBands(eqModel.parametricBands)
+                audioEngine.setBypass(!eqModel.isEnabled)
+                audioEngine.setEQFiltersEnabled(eqModel.isEQFiltersEnabled)
+                // Sync volume from profile to engine
+                audioEngine.setPreGain(eqModel.preGain)
+                audioEngine.setOutputGain(eqModel.outputGain)
+                audioEngine.setLimiterEnabled(eqModel.limiterEnabled)
+                audioEngine.setLimiterCeilingDB(eqModel.limiterCeilingDB)
+                audioEngine.setAutoStopClippingEnabled(eqModel.autoStopClippingEnabled)
+                audioEngine.setVolume(eqModel.volume)
+            }
+        }
+
+        audioEngine.onPreGainAutoAdjusted = { newPreGain in
+            DispatchQueue.main.async {
+                eqModel.setPreGain(gain: newPreGain)
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack {
+            Image(systemName: "slider.horizontal.3")
+                .font(.title)
+
+            Text("SoundMaxx EQ")
+                .font(.title3.weight(.semibold))
+
+            Text("by Bill Rimell")
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.primary.opacity(0.8))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.primary.opacity(0.08), in: Capsule())
+
+            Spacer()
+
+            Button {
+                showingHelp.toggle()
+            } label: {
+                Image(systemName: "questionmark.circle")
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showingHelp) {
+                helpView
+            }
+
+            HStack(spacing: 8) {
+                Text("Audio")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Toggle(
+                    "",
+                    isOn: Binding(
+                        get: { eqModel.isEnabled },
+                        set: { eqModel.setAudioEnabled($0) }
+                    )
+                )
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .help("Enable or bypass all processing (headroom + EQ filters)")
+
+                Text("EQ")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Toggle(
+                    "",
+                    isOn: Binding(
+                        get: { eqModel.isEQFiltersEnabled },
+                        set: { eqModel.setFiltersEnabled($0) }
+                    )
+                )
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .disabled(!eqModel.isEnabled)
+                    .help("Bypass only EQ filters while keeping headroom active for A/B comparison")
+            }
+        }
+    }
+
+    private var helpView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Quick Help")
+                    .font(.headline)
+
+                Divider()
+
+                Group {
+                    helpRow(icon: "slider.vertical.3", title: "EQ Sliders", desc: "Drag each band up/down to shape tone (±12 dB).")
+                    helpRow(icon: "arrow.up.and.down.circle", title: "Gain Staging", desc: "Headroom is pre-EQ safety (-12 to 0 dB). Volume is post-EQ loudness (-40 to +40 dB).")
+                    helpRow(icon: "power", title: "Audio + EQ Toggles", desc: "Audio bypasses the full chain. EQ bypasses filters only for quick A/B checks.")
+                    helpRow(icon: "waveform.path.ecg", title: "Clipping + Limiter", desc: "Watch EQ-stage clipping, limiter activity, and final output status.")
+                    helpRow(icon: "speaker.wave.2", title: "HDMI Volume", desc: "Software volume appears for outputs without hardware volume control.")
+                    helpRow(icon: "square.and.arrow.down", title: "Presets + Import", desc: "Use built-in/custom presets, or import AutoEQ ParametricEQ.txt / GraphicEQ.txt files.")
+                    helpRow(icon: "headphones", title: "AutoEQ", desc: "Search and apply headphone correction curves from AutoEQ.")
+                    helpRow(icon: "hifispeaker", title: "Device Profiles", desc: "Save EQ per output device. Profiles auto-restore and can auto-save tweaks.")
+                    helpRow(icon: "keyboard", title: "Output Shortcut", desc: "Control+Option+Command+O cycles selected shortcut targets.")
+                }
+
+                Divider()
+
+                Text("Latency & Buffer Controls")
+                    .font(.subheadline.weight(.semibold))
+
+                helpRow(icon: "waveform", title: "I/O Buffer (64–4096 frames)", desc: "How often audio is processed per callback. Lower = less latency but more CPU stress. 256 is a good default. Use 512–1024 on slower systems.")
+                helpRow(icon: "circle.grid.3x3", title: "Ring Capacity (1x–16x)", desc: "Total internal buffer space as a multiple of the I/O buffer. Higher = more stability. Lower = tighter latency. Increase this if you hear dropouts when switching apps.")
+                helpRow(icon: "scope", title: "Target Queue (1x–ring capacity)", desc: "How full the ring buffer is allowed to grow before older frames are trimmed. Lower = more aggressive trimming (less latency, more dropout risk). Higher = smoother but more delay.")
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Recommended settings:")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.secondary)
+                    Text("Balanced: I/O 256, Ring 4x, Target 2x")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("Low Latency: I/O 64–128, Ring 2–4x, Target 1–2x")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("Stable: I/O 512–1024, Ring 6–8x, Target 3–4x")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("Crackles → increase I/O buffer or ring capacity. Delay → decrease target queue. HDMI/Bluetooth usually needs higher buffer sizes.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(8)
+                .background(Color.secondary.opacity(0.08))
+                .cornerRadius(6)
+
+                Divider()
+
+                Text("Tip: Set macOS output to BlackHole 2ch, then choose your real output in SoundMaxx.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+        }
+        .frame(width: 360, height: 520)
+    }
+
+    private func helpRow(icon: String, title: String, desc: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .frame(width: 24)
+                .foregroundColor(.accentColor)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+                Text(desc)
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    private static let frequencyTooltips = [
+        "Sub-bass: Rumble, sub-woofer content",
+        "Bass: Kick drums, bass guitar fundamentals",
+        "Low-mid: Bass warmth, body of sound",
+        "Mid-bass: Reduce for less muddiness",
+        "Midrange: Vocal body, snare drum",
+        "Upper-mid: Vocal presence, clarity",
+        "Presence: Detail, intelligibility",
+        "Brilliance: Attack, consonants, hi-hat",
+        "Treble: Airiness, cymbal shimmer",
+        "Air: Sparkle, highest harmonics"
+    ]
+
+    private var responseCurvePoints: [EQResponsePoint] {
+        eqModel.responseCurve(sampleRate: Float(audioEngine.processingSampleRate))
+    }
+
+    private var responseGraph: some View {
+        EQResponseGraphView(
+            points: responseCurvePoints,
+            isEnabled: eqModel.isEnabled && eqModel.isEQFiltersEnabled,
+            sampleRate: audioEngine.processingSampleRate
+        )
+        .frame(height: isCompactLayout ? 120 : 154)
+        .help("Actual resulting EQ response across the frequency spectrum")
+    }
+
+    private var spectrumGraph: some View {
+        SpectrumAnalyzerView(
+            bars: audioEngine.spectrumBins,
+            isRunning: audioEngine.isRunning,
+            sampleRate: audioEngine.processingSampleRate,
+            isNormalized: $normalizeSpectrumAnalyzer
+        )
+        .frame(height: isCompactLayout ? 108 : 132)
+        .help("Real-time post-EQ spectrum (before output gain, limiter, and final volume).")
+    }
+
+    private var eqSliders: some View {
+        VStack(spacing: 6) {
+            HStack {
+                Text("\(eqModel.parametricBands.count) band\(eqModel.parametricBands.count == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                if !isCompactLayout {
+                    Button {
+                        eqModel.removeLastBand()
+                    } label: {
+                        Image(systemName: "minus")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(eqModel.parametricBands.count <= EQModel.minimumBandCount)
+                    .help("Remove last band")
+
+                    Button {
+                        eqModel.addBand()
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Add a new band")
+                }
+            }
+
+            Group {
+                if isCompactLayout {
+                    eqBandSliderRow
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 2)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        eqBandSliderRow
+                            .padding(.vertical, 2)
+                    }
+                }
+            }
+            .opacity(eqModel.isEnabled ? (eqModel.isEQFiltersEnabled ? 1.0 : 0.7) : 0.5)
+            .disabled(!eqModel.isEnabled)
+        }
+    }
+
+    private var eqBandSliderRow: some View {
+        HStack(alignment: .top, spacing: 8) {
+            ForEach(eqModel.parametricBands.indices, id: \.self) { index in
+                VStack(spacing: 4) {
+                    EQSliderView(
+                        value: Binding(
+                            get: { eqModel.parametricBands[index].gain },
+                            set: { eqModel.setBandGain(index: index, gain: $0) }
+                        ),
+                        label: "",
+                        tooltip: bandTooltip(index)
+                    )
+
+                    if !isCompactLayout {
+                        inlineBandControls(index)
+                    }
+                }
+            }
+        }
+    }
+
+    private func inlineBandControls(_ index: Int) -> some View {
+        let band = eqModel.parametricBands[index]
+
+        return VStack(spacing: 4) {
+            Menu {
+                ForEach(EQFilterType.allCases) { type in
+                    Button(type.displayName) {
+                        eqModel.setBandType(index: index, type: type)
+                    }
+                }
+            } label: {
+                Text(shortFilterTypeName(band.type))
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 3)
+                    .background(Color.gray.opacity(0.16))
+                    .cornerRadius(4)
+            }
+            .buttonStyle(.plain)
+
+            TextField(
+                "Freq",
+                value: Binding(
+                    get: { Double(eqModel.parametricBands[index].frequency) },
+                    set: { eqModel.setBandFrequency(index: index, frequency: Float($0)) }
+                ),
+                format: .number.precision(.fractionLength(0))
+            )
+            .textFieldStyle(.roundedBorder)
+            .controlSize(.small)
+            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .multilineTextAlignment(.center)
+            .help("Frequency (Hz)")
+
+            TextField(
+                "Q",
+                value: Binding(
+                    get: { Double(eqModel.parametricBands[index].q) },
+                    set: { eqModel.setBandQ(index: index, q: Float($0)) }
+                ),
+                format: .number.precision(.fractionLength(2))
+            )
+            .textFieldStyle(.roundedBorder)
+            .controlSize(.small)
+            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .multilineTextAlignment(.center)
+            .help("Q factor")
+
+            Button {
+                eqModel.removeBand(at: index)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9))
+            }
+            .buttonStyle(.plain)
+            .foregroundColor(.red)
+            .disabled(eqModel.parametricBands.count <= EQModel.minimumBandCount)
+            .help("Remove this band")
+        }
+        .frame(width: 60)
+    }
+
+    private var volumeControl: some View {
+        VStack(spacing: 4) {
+            HStack {
+                Image(systemName: "speaker.fill")
+                    .foregroundColor(.secondary)
+                    .font(.caption)
+
+                Slider(
+                    value: Binding(
+                        get: { Double(eqModel.volume) },
+                        set: { eqModel.setVolume(Float($0)) }
+                    ),
+                    in: 0...1
+                )
+                    .help("Software volume control - macOS disables hardware volume for HDMI outputs")
+
+                Image(systemName: "speaker.wave.3.fill")
+                    .foregroundColor(.secondary)
+                    .font(.caption)
+
+                Text("\(Int(eqModel.volume * 100))%")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(width: 35, alignment: .trailing)
+            }
+
+            Toggle(
+                "Separate volume per output device",
+                isOn: Binding(
+                    get: { eqModel.usePerDeviceVolume },
+                    set: { eqModel.setUsePerDeviceVolume($0) }
+                )
+            )
+            .font(.caption)
+            .toggleStyle(.switch)
+            .help("When enabled, each output device keeps its own software volume level.")
+
+            HStack {
+                Text("HDMI Volume (no hardware control)")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                Text(eqModel.usePerDeviceVolume ? "Separate volume per output device" : "Shared volume across all output devices")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    private var preGainControl: some View {
+        Group {
+            if isCompactLayout {
+                compactPreGainControl
+            } else {
+                advancedPreGainControl
+            }
+        }
+        .opacity(eqModel.isEnabled ? 1.0 : 0.5)
+    }
+
+    private var compactPreGainControl: some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text("Volume")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(width: 55, alignment: .leading)
+
+                Slider(
+                    value: Binding(
+                        get: { Double(eqModel.outputGain) },
+                        set: { eqModel.setOutputGain(gain: Float($0)) }
+                    ),
+                    in: Double(EQModel.outputGainRange.lowerBound)...Double(EQModel.outputGainRange.upperBound),
+                    step: 0.1
+                )
+
+                Text(String(format: "%+.1f dB", eqModel.outputGain))
+                    .font(.caption.monospacedDigit())
+                    .foregroundColor(.secondary)
+                    .frame(width: 62, alignment: .trailing)
+            }
+
+            Text("Headroom is available in Advanced Options")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(audioEngine.eqStageClippingDetected ? Color.red : Color.secondary.opacity(0.28))
+                    .frame(width: 8, height: 8)
+
+                Text(audioEngine.eqStageClippingDetected ? "EQ stage clipping" : "EQ stage clean")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(audioEngine.eqStageClippingDetected ? .red : .secondary)
+
+                Spacer()
+
+                Text(eqPeakLabel)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(.secondary)
+            }
+            .help("Headroom + EQ stage peak/clipping monitor.")
+
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(outputStatusIndicatorColor)
+                    .frame(width: 8, height: 8)
+
+                Text(outputStatusText)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(outputStatusColor)
+
+                Spacer()
+
+                Text(outputPeakLabel)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(.secondary)
+            }
+            .help("Post-EQ limiter activity and final output clipping monitor.")
+
+            HStack {
+                Spacer()
+
+                Button("Clear Meters") {
+                    audioEngine.clearSafetyMeters()
+                }
+                .buttonStyle(.borderless)
+                .font(.caption2)
+                .help("Reset current and peak-hold safety meters.")
+            }
+        }
+    }
+
+    private var advancedPreGainControl: some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text("Headroom")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(width: 55, alignment: .leading)
+
+                Slider(
+                    value: Binding(
+                        get: { Double(eqModel.preGain) },
+                        set: { eqModel.setPreGain(gain: Float($0)) }
+                    ),
+                    in: Double(EQModel.preGainRange.lowerBound)...Double(EQModel.preGainRange.upperBound),
+                    step: 0.1
+                )
+                .help("Headroom control before EQ filters. Keep this negative when EQ has positive boosts.")
+
+                Text(String(format: "%+.1f dB", eqModel.preGain))
+                    .font(.caption.monospacedDigit())
+                    .foregroundColor(.secondary)
+                    .frame(width: 62, alignment: .trailing)
+            }
+
+            HStack {
+                Text("Volume")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(width: 55, alignment: .leading)
+
+                Slider(
+                    value: Binding(
+                        get: { Double(eqModel.outputGain) },
+                        set: { eqModel.setOutputGain(gain: Float($0)) }
+                    ),
+                    in: Double(EQModel.outputGainRange.lowerBound)...Double(EQModel.outputGainRange.upperBound),
+                    step: 0.1
+                )
+                .help("User loudness control after EQ and before limiter.")
+
+                Text(String(format: "%+.1f dB", eqModel.outputGain))
+                    .font(.caption.monospacedDigit())
+                    .foregroundColor(.secondary)
+                    .frame(width: 62, alignment: .trailing)
+            }
+
+            Text("Signal chain: Input -> Headroom -> EQ -> Volume -> Limiter -> Output")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+
+            HStack(spacing: 10) {
+                Toggle(
+                    "auto-stop EQ clipping",
+                    isOn: Binding(
+                        get: { eqModel.autoStopClippingEnabled },
+                        set: { eqModel.setAutoStopClippingEnabled($0) }
+                    )
+                )
+                .toggleStyle(.button)
+                .controlSize(.small)
+                .help("Automatically lowers headroom when the EQ stage clips.")
+
+                Toggle(
+                    "Limiter",
+                    isOn: Binding(
+                        get: { eqModel.limiterEnabled },
+                        set: { eqModel.setLimiterEnabled($0) }
+                    )
+                )
+                .toggleStyle(.button)
+                .controlSize(.small)
+                .help("Final safety stage to avoid output overs.")
+
+                Spacer()
+            }
+
+            if eqModel.limiterEnabled {
+                HStack {
+                    Text("Ceiling")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .frame(width: 55, alignment: .leading)
+
+                    Slider(
+                        value: Binding(
+                            get: { Double(eqModel.limiterCeilingDB) },
+                            set: { eqModel.setLimiterCeilingDB(Float($0)) }
+                        ),
+                        in: -6.0 ... -0.1,
+                        step: 0.1
+                    )
+                    .help("Limiter ceiling in dBFS.")
+
+                    Text(String(format: "%.1f dBFS", eqModel.limiterCeilingDB))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundColor(.secondary)
+                        .frame(width: 62, alignment: .trailing)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(audioEngine.eqStageClippingDetected ? Color.red : Color.secondary.opacity(0.28))
+                    .frame(width: 8, height: 8)
+
+                Text(audioEngine.eqStageClippingDetected ? "EQ stage clipping" : "EQ stage clean")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(audioEngine.eqStageClippingDetected ? .red : .secondary)
+
+                Spacer()
+
+                Text(eqPeakLabel)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(.secondary)
+            }
+            .help("Headroom + EQ stage peak/clipping monitor.")
+
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(outputStatusIndicatorColor)
+                    .frame(width: 8, height: 8)
+
+                Text(outputStatusText)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(outputStatusColor)
+
+                Spacer()
+
+                Text(outputPeakLabel)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(.secondary)
+            }
+            .help("Post-EQ limiter activity and final output clipping monitor.")
+
+            HStack {
+                Spacer()
+
+                Button("Clear Meters") {
+                    audioEngine.clearSafetyMeters()
+                }
+                .buttonStyle(.borderless)
+                .font(.caption2)
+                .help("Reset current and peak-hold safety meters.")
+            }
+        }
+    }
+
+    private var eqPeakLabel: String {
+        meterLabel(
+            current: audioEngine.eqStagePeakSample,
+            hold: audioEngine.eqStagePeakHoldSample,
+            prefix: "EQ"
+        )
+    }
+
+    private var outputPeakLabel: String {
+        meterLabel(
+            current: audioEngine.outputPeakSample,
+            hold: audioEngine.outputPeakHoldSample,
+            prefix: "Out"
+        )
+    }
+
+    private var outputStatusText: String {
+        if audioEngine.outputStageClippingDetected {
+            return "Output clipping"
+        }
+        if audioEngine.outputLimiterEngaged {
+            return "Output limited"
+        }
+        return "Output clean"
+    }
+
+    private var outputStatusColor: Color {
+        if audioEngine.outputStageClippingDetected {
+            return .red
+        }
+        if audioEngine.outputLimiterEngaged {
+            return .orange
+        }
+        return .secondary
+    }
+
+    private var outputStatusIndicatorColor: Color {
+        if audioEngine.outputStageClippingDetected {
+            return .red
+        }
+        if audioEngine.outputLimiterEngaged {
+            return .orange
+        }
+        return Color.secondary.opacity(0.28)
+    }
+
+    private func meterLabel(current: Float, hold: Float, prefix: String) -> String {
+        let currentDB = dbfsString(from: current)
+        let holdDB = dbfsString(from: hold)
+        return "\(prefix) \(currentDB) (pk \(holdDB))"
+    }
+
+    private func dbfsString(from peak: Float) -> String {
+        guard peak > 0 else { return "-inf dBFS" }
+
+        let dBFS = 20.0 * log10(Double(peak))
+        if dBFS >= 0 {
+            return String(format: "+%.1f dBFS", dBFS)
+        }
+
+        return String(format: "%.1f dBFS", dBFS)
+    }
+
+    private var presetControls: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Text("Preset")
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                Menu {
+                    // Built-in presets
+                    Section("Built-in") {
+                        ForEach(BuiltInPreset.allCases) { preset in
+                            Button(preset.rawValue) {
+                                eqModel.applyBuiltInPreset(preset)
+                            }
+                        }
+                    }
+
+                    // Custom presets
+                    if !presetManager.customPresets.isEmpty {
+                        Section("Custom") {
+                            ForEach(presetManager.customPresets) { preset in
+                                Button(preset.name) {
+                                    eqModel.applyCustomPreset(preset)
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Text(currentPresetName)
+                            .frame(width: 120, alignment: .leading)
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.gray.opacity(0.2))
+                    .cornerRadius(6)
+                }
+                .help("Select a preset EQ curve")
+
+                Button {
+                    newPresetName = ""
+                    showingSavePreset = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.borderless)
+                .help("Save current EQ as a custom preset")
+
+                Button {
+                    showingAutoEQ = true
+                } label: {
+                    Image(systemName: "headphones")
+                }
+                .buttonStyle(.borderless)
+                .help("Apply AutoEQ headphone correction")
+                .popover(isPresented: $showingAutoEQ) {
+                    AutoEQView()
+                        .environmentObject(eqModel)
+                }
+
+                Button {
+                    showingEQImportPicker = true
+                } label: {
+                    Image(systemName: "square.and.arrow.down")
+                }
+                .buttonStyle(.borderless)
+                .help("Import an AutoEQ ParametricEQ.txt file")
+
+                if let customPreset = eqModel.selectedCustomPreset {
+                    Button {
+                        presetManager.deletePreset(customPreset)
+                        eqModel.applyBuiltInPreset(.flat)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundColor(.red)
+                    .help("Delete this preset")
+                }
+            }
+        }
+    }
+
+    private var currentPresetName: String {
+        if let preset = eqModel.selectedBuiltInPreset {
+            return preset.rawValue
+        } else if let preset = eqModel.selectedCustomPreset {
+            return preset.name
+        } else {
+            return "Custom"
+        }
+    }
+
+    private var selectedOutputBinding: Binding<AudioDeviceID?> {
+        Binding(
+            get: { audioEngine.selectedOutputDeviceID },
+            set: { newDevice in
+                if let deviceID = newDevice {
+                    audioEngine.setOutputDevice(deviceID)
+                }
+                persistSelectedDevices()
+            }
+        )
+    }
+
+    private var deviceControls: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Text("Input")
+                    .foregroundColor(.secondary)
+                    .frame(width: 50, alignment: .leading)
+
+                Picker("", selection: $selectedInputID) {
+                    Text("Select...").tag(nil as AudioDeviceID?)
+                    ForEach(deviceManager.inputDevices) { device in
+                        Text(device.name).tag(device.id as AudioDeviceID?)
+                    }
+                }
+                .labelsHidden()
+                .help("Select BlackHole 2ch to capture system audio")
+                .onChange(of: selectedInputID) { newDevice in
+                    if let deviceID = newDevice {
+                        audioEngine.setInputDevice(deviceID)
+                    }
+                    persistSelectedDevices()
+                }
+            }
+
+            HStack {
+                Text("Output")
+                    .foregroundColor(.secondary)
+                    .frame(width: 50, alignment: .leading)
+
+                Picker("", selection: selectedOutputBinding) {
+                    Text("Select...").tag(nil as AudioDeviceID?)
+                    ForEach(deviceManager.outputDevices) { device in
+                        Text(device.name).tag(device.id as AudioDeviceID?)
+                    }
+                }
+                .labelsHidden()
+                .help("Select your speakers or headphones")
+
+                Button {
+                    refreshOutputDevices()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .help("Refresh output devices")
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text("Shortcut")
+                        .foregroundColor(.secondary)
+                        .frame(width: 60, alignment: .leading)
+
+                    Button {
+                        cycleToNextOutputDevice()
+                    } label: {
+                        Label("Switch Output", systemImage: "keyboard")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Switch to next selected output device")
+
+                    shortcutTargetsMenu
+
+                    Spacer()
+
+                    Text("⌃⌥⌘O")
+                        .font(.caption.weight(.medium))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+                }
+
+                HStack {
+                    Spacer().frame(width: 68)
+                    Text(shortcutTargetsSummary)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            // Device profile controls
+            if eqModel.currentDeviceName != nil {
+                deviceProfileControls
+            }
+
+            latencyControls
+
+            HStack(spacing: 8) {
+                Button {
+                    exportSettingsBackup()
+                } label: {
+                    Label("Export Settings", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Export app settings, custom presets, and device profiles to a JSON backup")
+
+                Button {
+                    importSettingsBackup()
+                } label: {
+                    Label("Import Settings", systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Import a SoundMaxx JSON backup and apply it immediately")
+
+                Spacer()
+            }
+
+        }
+    }
+
+    private var deviceProfileControls: some View {
+        VStack(spacing: 8) {
+            HStack {
+                if eqModel.hasDeviceProfile {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .font(.caption)
+                        Text("Profile saved for \(eqModel.currentDeviceName ?? "device")")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        eqModel.deleteCurrentDeviceProfile()
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundColor(.red)
+                    .help("Delete device profile")
+                } else {
+                    HStack(spacing: 6) {
+                        Image(systemName: "circle.dashed")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                        Text("No profile for \(eqModel.currentDeviceName ?? "device")")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        eqModel.saveCurrentAsDeviceProfile()
+                    } label: {
+                        Text("Save Profile")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Save EQ settings for this device")
+                }
+            }
+
+            Toggle(
+                "Auto-save profile changes",
+                isOn: Binding(
+                    get: { eqModel.autoSaveEnabled },
+                    set: { eqModel.setAutoSaveEnabled($0) }
+                )
+            )
+            .toggleStyle(.checkbox)
+            .font(.caption)
+            .help("Automatically update this device profile as you tweak EQ settings")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.secondary.opacity(0.06))
+        .cornerRadius(8)
+    }
+
+    private var latencyControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Latency & Buffering")
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.secondary)
+
+            HStack {
+                Text("I/O Buffer")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(width: 100, alignment: .leading)
+
+                Picker(
+                    "",
+                    selection: $preferredIOBufferFrames
+                ) {
+                    ForEach(AudioEngine.supportedIOBufferFrames, id: \.self) { frames in
+                        Text("\(frames) frames").tag(frames)
+                    }
+                }
+                .labelsHidden()
+                .help("Lower values reduce latency but can crackle on slower systems.")
+
+                Spacer()
+            }
+
+            HStack {
+                Text("Ring Capacity")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(width: 100, alignment: .leading)
+
+                Stepper(value: $ringBufferCapacityMultiplier, in: 1...16) {
+                    Text("\(ringBufferCapacityMultiplier)x")
+                        .font(.caption)
+                        .frame(width: 40, alignment: .leading)
+                }
+                .help("Total buffering available before overflow. Lower reduces latency growth.")
+
+                Spacer()
+            }
+
+            HStack {
+                Text("Target Queue")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(width: 100, alignment: .leading)
+
+                Stepper(value: $latencyTargetMultiplier, in: 1...ringBufferCapacityMultiplier) {
+                    Text("\(latencyTargetMultiplier)x")
+                        .font(.caption)
+                        .frame(width: 40, alignment: .leading)
+                }
+                .help("Keeps queue near this depth by dropping older buffered frames to avoid A/V drift.")
+
+                Spacer()
+            }
+
+            Text("Effective: in \(audioEngine.effectiveInputBufferFrames)f, out \(audioEngine.effectiveOutputBufferFrames)f, ring \(audioEngine.effectiveRingBufferCapacityFrames)f")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.secondary.opacity(0.06))
+        .cornerRadius(8)
+    }
+
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Group {
+                if isCompactLayout {
+                    compactFooter
+                } else {
+                    fullFooter
+                }
+            }
+
+            if case .updateAvailable(let version, let dmgURL) = updateChecker.state {
+                updateBanner(version: version, dmgURL: dmgURL)
+            }
+
+            if let error = audioEngine.errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func updateBanner(version: String, dmgURL: URL) -> some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .foregroundColor(.accentColor)
+                Text("v\(version) available")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+                updateBannerAction(dmgURL: dmgURL)
+            }
+            if case .downloading(let progress) = updateChecker.downloadState {
+                ProgressView(value: progress)
+                    .progressViewStyle(.linear)
+                    .animation(.linear, value: progress)
+            }
+        }
+        .padding(8)
+        .background(Color.accentColor.opacity(0.08))
+        .cornerRadius(8)
+    }
+
+    @ViewBuilder
+    private func updateBannerAction(dmgURL: URL) -> some View {
+        switch updateChecker.downloadState {
+        case .idle, .failed:
+            Button(updateChecker.downloadState == .failed ? "Retry" : "Download & Install") {
+                updateChecker.downloadAndInstall(from: dmgURL)
+            }
+            .font(.caption)
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        case .downloading(let progress):
+            Text("\(Int(progress * 100))%")
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+        case .openingInstaller:
+            Text("Opening installer…")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private var fullFooter: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Toggle("Launch at Login", isOn: $launchAtLogin.isEnabled)
+                    .font(.caption)
+                    .toggleStyle(.checkbox)
+                    .help("Automatically start SoundMaxx when you log in")
+
+                Spacer()
+
+                statusIndicator
+            }
+
+            HStack(spacing: 5) {
+                Button("Reset") {
+                    eqModel.reset()
+                }
+                .help("Reset all EQ bands to 0dB (flat)")
+
+                Divider().frame(height: 18)
+
+                Button("Undo") {
+                    eqModel.undo()
+                }
+                .disabled(!eqModel.canUndo)
+                .keyboardShortcut("z", modifiers: [.command])
+                .help("Undo last EQ change")
+
+                Button("Redo") {
+                    eqModel.redo()
+                }
+                .disabled(!eqModel.canRedo)
+                .keyboardShortcut("z", modifiers: [.command, .shift])
+                .help("Redo last undone EQ change")
+
+                Divider().frame(height: 18)
+
+                Button("Save A") {
+                    eqModel.saveCompareSnapshotA()
+                }
+                .help("Save current EQ state as compare slot A")
+
+                Button("A") {
+                    eqModel.loadCompareSnapshotA()
+                }
+                .disabled(!eqModel.hasCompareA)
+                .help("Load compare slot A")
+
+                Button("Save B") {
+                    eqModel.saveCompareSnapshotB()
+                }
+                .help("Save current EQ state as compare slot B")
+
+                Button("B") {
+                    eqModel.loadCompareSnapshotB()
+                }
+                .disabled(!eqModel.hasCompareB)
+                .help("Load compare slot B")
+
+                Spacer()
+
+                Button(audioEngine.isRunning ? "Stop" : "Start") {
+                    if audioEngine.isRunning {
+                        audioEngine.stop()
+                    } else {
+                        audioEngine.start()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .help(audioEngine.isRunning ? "Stop audio processing" : "Start audio processing")
+
+                Button("Quit") {
+                    NSApplication.shared.terminate(nil)
+                }
+                .help("Quit SoundMaxx")
+            }
+        }
+    }
+
+    private var compactFooter: some View {
+        VStack(spacing: 8) {
+            HStack {
+                statusIndicator
+
+                Spacer()
+
+                Button("Reset") {
+                    eqModel.reset()
+                }
+
+                Button("Undo") {
+                    eqModel.undo()
+                }
+                .disabled(!eqModel.canUndo)
+
+                Button("Redo") {
+                    eqModel.redo()
+                }
+                .disabled(!eqModel.canRedo)
+
+                Button("Save A") {
+                    eqModel.saveCompareSnapshotA()
+                }
+
+                Button("A") {
+                    eqModel.loadCompareSnapshotA()
+                }
+                .disabled(!eqModel.hasCompareA)
+
+                Button("Save B") {
+                    eqModel.saveCompareSnapshotB()
+                }
+
+                Button("B") {
+                    eqModel.loadCompareSnapshotB()
+                }
+                .disabled(!eqModel.hasCompareB)
+
+                Button(audioEngine.isRunning ? "Stop" : "Start") {
+                    if audioEngine.isRunning {
+                        audioEngine.stop()
+                    } else {
+                        audioEngine.start()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            HStack {
+                Button("Advanced Options") {
+                    openAdvancedWindow()
+                }
+                .disabled(advancedWindowID == nil && onOpenAdvancedWindow == nil)
+
+                Spacer()
+
+                Button("Quit") {
+                    NSApplication.shared.terminate(nil)
+                }
+            }
+        }
+    }
+
+    private var statusIndicator: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(audioEngine.isRunning ? Color.green : Color.red)
+                .frame(width: 8, height: 8)
+
+            Text(audioEngine.isRunning ? "Running" : "Stopped")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private var savePresetSheet: some View {
+        VStack(spacing: 16) {
+            Text("Save Preset")
+                .font(.headline)
+
+            TextField("Preset Name", text: $newPresetName)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 200)
+
+            HStack {
+                Button("Cancel") {
+                    showingSavePreset = false
+                }
+
+                Button("Save") {
+                    if !newPresetName.isEmpty {
+                        presetManager.savePreset(
+                            name: newPresetName,
+                            bands: eqModel.parametricBands,
+                            preGain: eqModel.preGain,
+                            outputGain: eqModel.outputGain,
+                            limiterEnabled: eqModel.limiterEnabled,
+                            limiterCeilingDB: eqModel.limiterCeilingDB
+                        )
+                        showingSavePreset = false
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(newPresetName.isEmpty)
+            }
+        }
+        .padding()
+        .frame(width: 280)
+    }
+
+    private func syncEQToEngine() {
+        audioEngine.setBands(eqModel.parametricBands)
+        audioEngine.setBypass(!eqModel.isEnabled)
+        audioEngine.setEQFiltersEnabled(eqModel.isEQFiltersEnabled)
+        audioEngine.setPreGain(eqModel.preGain)
+        audioEngine.setOutputGain(eqModel.outputGain)
+        audioEngine.setLimiterEnabled(eqModel.limiterEnabled)
+        audioEngine.setLimiterCeilingDB(eqModel.limiterCeilingDB)
+        audioEngine.setAutoStopClippingEnabled(eqModel.autoStopClippingEnabled)
+        audioEngine.setVolume(eqModel.volume)
+        applyLatencySettingsToEngine()
+    }
+
+    private func bandFrequencyLabel(_ index: Int) -> String {
+        guard eqModel.parametricBands.indices.contains(index) else { return "-" }
+        let frequency = eqModel.parametricBands[index].frequency
+        if frequency >= 1000 {
+            return String(format: "%.1fK", frequency / 1000.0)
+        }
+        return String(format: "%.0f", frequency)
+    }
+
+    private func bandTooltip(_ index: Int) -> String {
+        guard eqModel.parametricBands.indices.contains(index) else { return "Adjust parametric EQ band" }
+        let band = eqModel.parametricBands[index]
+        let frequencyText = String(format: "%.0f", band.frequency)
+        let qText = String(format: "%.2f", band.q)
+        return "\(band.type.displayName): \(frequencyText)Hz, Q \(qText), Gain \(Int(band.gain))dB"
+    }
+
+    private func shortFilterTypeName(_ type: EQFilterType) -> String {
+        switch type {
+        case .peak:
+            return "Peak"
+        case .lowShelf:
+            return "LS"
+        case .highShelf:
+            return "HS"
+        case .lowPass:
+            return "LP"
+        case .highPass:
+            return "HP"
+        case .notch:
+            return "Notch"
+        case .bandPass:
+            return "BP"
+        }
+    }
+
+    private func autoSelectDevicesAndStart() {
+        restoreSavedDeviceSelections(force: false)
+
+        if selectedInputID == nil, let blackhole = deviceManager.findBlackHole() {
+            selectedInputID = blackhole.id
+            audioEngine.setInputDevice(blackhole.id)
+        }
+
+        if !audioEngine.isRunning,
+           audioEngine.selectedInputDeviceID != nil,
+           audioEngine.selectedOutputDeviceID != nil {
+            audioEngine.start()
+        }
+    }
+
+    private func openAdvancedWindow() {
+        if let onOpenAdvancedWindow {
+            onOpenAdvancedWindow()
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        guard let windowID = advancedWindowID else { return }
+        openWindow(id: windowID)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func restoreSavedDeviceSelections(force: Bool = false) {
+        guard let settings = settingsStore.load() else { return }
+
+        if (force || selectedInputID == nil), let savedInputID = settings.selectedInputDeviceID {
+            let inputID = AudioDeviceID(savedInputID)
+            if deviceManager.inputDevices.contains(where: { $0.id == inputID }) {
+                selectedInputID = inputID
+                audioEngine.setInputDevice(inputID)
+            }
+        }
+
+        if (force || audioEngine.selectedOutputDeviceID == nil), let savedOutputID = settings.selectedOutputDeviceID {
+            let outputID = AudioDeviceID(savedOutputID)
+            if deviceManager.outputDevices.contains(where: { $0.id == outputID }) {
+                audioEngine.setOutputDevice(outputID)
+            }
+        }
+    }
+
+    private func persistSelectedDevices() {
+        settingsStore.update { settings in
+            settings.selectedInputDeviceID = selectedInputID.map { Int32($0) }
+            settings.selectedOutputDeviceID = audioEngine.selectedOutputDeviceID.map { Int32($0) }
+            settings.shortcutOutputDeviceUIDs = shortcutOutputDeviceUIDs.isEmpty ? nil : shortcutOutputDeviceUIDs
+        }
+    }
+
+    private func exportSettingsBackup() {
+        let savePanel = NSSavePanel()
+        savePanel.title = "Export SoundMaxx Settings"
+        savePanel.nameFieldStringValue = "SoundMaxx-Settings-Backup.json"
+        savePanel.allowedContentTypes = [.json]
+        savePanel.isExtensionHidden = false
+
+        guard savePanel.runModal() == .OK, let destinationURL = savePanel.url else { return }
+
+        let bundle = SettingsTransferBundle(
+            appSettings: settingsStore.current(),
+            deviceProfiles: DeviceProfileManager.shared.allProfiles(),
+            customPresets: presetManager.customPresets
+        )
+
+        do {
+            try SettingsTransfer.write(bundle, to: destinationURL)
+            settingsTransferMessage = "Settings exported to \(destinationURL.lastPathComponent)."
+        } catch {
+            settingsTransferMessage = "Export failed: \(error.localizedDescription)"
+        }
+
+        showingSettingsTransferMessage = true
+    }
+
+    private func importSettingsBackup() {
+        let openPanel = NSOpenPanel()
+        openPanel.title = "Import SoundMaxx Settings"
+        openPanel.allowedContentTypes = [.json]
+        openPanel.allowsMultipleSelection = false
+
+        guard openPanel.runModal() == .OK, let sourceURL = openPanel.url else { return }
+
+        pendingSettingsImportURL = sourceURL
+        showingSettingsImportConfirmation = true
+    }
+
+    private func performSettingsImport(from sourceURL: URL) {
+        do {
+            let bundle = try SettingsTransfer.read(from: sourceURL)
+
+            settingsStore.replace(with: bundle.appSettings)
+            DeviceProfileManager.shared.replaceProfiles(with: bundle.deviceProfiles)
+            presetManager.replacePresets(with: bundle.customPresets)
+
+            loadShortcutOutputTargets()
+            deviceManager.refreshDevices()
+            eqModel.reloadFromStoredSettings()
+            eqModel.resolvePresetSelection(using: presetManager.customPresets)
+
+            restoreSavedDeviceSelections(force: true)
+            syncEQToEngine()
+            persistSelectedDevices()
+
+            settingsTransferMessage = "Settings imported from \(sourceURL.lastPathComponent)."
+        } catch {
+            settingsTransferMessage = "Import failed: \(error.localizedDescription)"
+        }
+
+        showingSettingsTransferMessage = true
+    }
+
+    private func cycleToNextOutputDevice() {
+        let currentDeviceID = audioEngine.selectedOutputDeviceID
+        guard let nextDevice = deviceManager.nextOutputDevice(
+            after: currentDeviceID,
+            preferredUIDs: shortcutOutputDeviceUIDs
+        ) else { return }
+
+        audioEngine.setOutputDevice(nextDevice.id)
+        persistSelectedDevices()
+    }
+
+    private var shortcutTargetsMenu: some View {
+        Menu {
+            Button("Use All Outputs") {
+                shortcutOutputDeviceUIDs = []
+                persistSelectedDevices()
+            }
+
+            if !deviceManager.outputDevices.isEmpty {
+                Divider()
+
+                ForEach(deviceManager.outputDevices) { device in
+                    Button {
+                        toggleShortcutTarget(for: device)
+                    } label: {
+                        HStack {
+                            Text(device.name)
+                            if shortcutOutputDeviceUIDs.contains(device.uid) {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            Label("Targets", systemImage: "line.3.horizontal.decrease.circle")
+                .labelStyle(.titleAndIcon)
+        }
+        .buttonStyle(.borderless)
+        .help("Choose which outputs the shortcut cycles through")
+    }
+
+    private var shortcutTargetsSummary: String {
+        if shortcutOutputDeviceUIDs.isEmpty {
+            return "Shortcut targets: all outputs"
+        }
+
+        let totalSelectedCount = shortcutOutputDeviceUIDs.count
+        let connectedTargetCount = deviceManager.outputDevices.filter { shortcutOutputDeviceUIDs.contains($0.uid) }.count
+        if connectedTargetCount == totalSelectedCount {
+            return "Shortcut targets: \(totalSelectedCount) selected"
+        }
+
+        return "Shortcut targets: \(connectedTargetCount) connected of \(totalSelectedCount) selected"
+    }
+
+    private func loadShortcutOutputTargets() {
+        shortcutOutputDeviceUIDs = settingsStore.load()?.shortcutOutputDeviceUIDs ?? []
+    }
+
+    private func loadSpectrumAnalyzerSettings() {
+        normalizeSpectrumAnalyzer = settingsStore.load()?.normalizeSpectrumAnalyzer ?? false
+    }
+
+    private func loadLatencySettings() {
+        let settings = settingsStore.load()
+        preferredIOBufferFrames = UInt32(max(16, settings?.preferredIOBufferFrames ?? Int32(AudioEngine.defaultIOBufferFrames)))
+        ringBufferCapacityMultiplier = UInt32(max(1, settings?.ringBufferCapacityMultiplier ?? Int32(AudioEngine.defaultRingBufferCapacityMultiplier)))
+        latencyTargetMultiplier = UInt32(max(1, settings?.latencyTargetMultiplier ?? Int32(AudioEngine.defaultLatencyTargetMultiplier)))
+        if latencyTargetMultiplier > ringBufferCapacityMultiplier {
+            latencyTargetMultiplier = ringBufferCapacityMultiplier
+        }
+    }
+
+    private func persistSpectrumAnalyzerSettings() {
+        settingsStore.update { settings in
+            settings.normalizeSpectrumAnalyzer = normalizeSpectrumAnalyzer
+        }
+    }
+
+    private func applyLatencySettingsToEngine() {
+        audioEngine.updateLatencySettings(
+            ioBufferFrames: preferredIOBufferFrames,
+            ringCapacityMultiplier: ringBufferCapacityMultiplier,
+            latencyTargetMultiplier: latencyTargetMultiplier
+        )
+    }
+
+    private func persistLatencySettings() {
+        settingsStore.update { settings in
+            settings.preferredIOBufferFrames = Int32(preferredIOBufferFrames)
+            settings.ringBufferCapacityMultiplier = Int32(ringBufferCapacityMultiplier)
+            settings.latencyTargetMultiplier = Int32(latencyTargetMultiplier)
+        }
+    }
+
+    private func toggleShortcutTarget(for device: AudioDevice) {
+        if let index = shortcutOutputDeviceUIDs.firstIndex(of: device.uid) {
+            shortcutOutputDeviceUIDs.remove(at: index)
+        } else {
+            shortcutOutputDeviceUIDs.append(device.uid)
+        }
+        persistSelectedDevices()
+    }
+
+    private func refreshOutputDevices() {
+        let currentDeviceID = audioEngine.selectedOutputDeviceID
+        deviceManager.refreshDevices()
+
+        guard let currentDeviceID else { return }
+        guard deviceManager.outputDevices.contains(where: { $0.id == currentDeviceID }) else {
+            if let fallbackDeviceID = deviceManager.getDefaultOutputDevice(),
+               deviceManager.outputDevices.contains(where: { $0.id == fallbackDeviceID }) {
+                audioEngine.setOutputDevice(fallbackDeviceID)
+                persistSelectedDevices()
+            }
+            return
+        }
+    }
+
+    private func importEQFile(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let fileURL = urls.first else { return }
+
+            do {
+                let fileContents = try readTextFile(fileURL)
+                let curve = try autoEQManager.parseImportedEQ(content: fileContents)
+
+                if let importedBands = curve.parametricBands, !importedBands.isEmpty {
+                    eqModel.applyImportedBands(importedBands, preGain: curve.preGain)
+                } else {
+                    eqModel.applyImportedBands(EQBand.tenBand(withGains: curve.bands), preGain: curve.preGain)
+                }
+            } catch {
+                eqImportErrorMessage = "Could not parse this EQ file. Use AutoEQ ParametricEQ.txt (or GraphicEQ.txt) format."
+                showingEQImportError = true
+            }
+
+        case .failure(let error):
+            eqImportErrorMessage = error.localizedDescription
+            showingEQImportError = true
+        }
+    }
+
+    private func readTextFile(_ url: URL) throws -> String {
+        let isAccessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if isAccessing {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let data = try Data(contentsOf: url)
+
+        if let text = String(data: data, encoding: .utf8) {
+            return text
+        }
+
+        if let text = String(data: data, encoding: .ascii) {
+            return text
+        }
+
+        if let text = String(data: data, encoding: .isoLatin1) {
+            return text
+        }
+
+        throw CocoaError(.fileReadInapplicableStringEncoding)
+    }
+}
+
+private struct EQResponseGraphView: View {
+    let points: [EQResponsePoint]
+    let isEnabled: Bool
+    let sampleRate: Double
+
+    private let frequencyTicks: [Float] = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
+    private let labeledFrequencyTicks: [Float] = [20, 100, 1000, 10000, 20000]
+    private let gainTicks: [Float] = [-24, -12, 0, 12, 24]
+    private let gainRange: ClosedRange<Float> = -24...24
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Response")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                Text(String(format: "%.1f kHz", sampleRate / 1000.0))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(.secondary)
+            }
+
+            GeometryReader { proxy in
+                let width = proxy.size.width
+                let height = proxy.size.height
+
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.08))
+
+                    ForEach(gainTicks, id: \.self) { tick in
+                        Path { path in
+                            let y = yPosition(for: tick, in: height)
+                            path.move(to: CGPoint(x: 0, y: y))
+                            path.addLine(to: CGPoint(x: width, y: y))
+                        }
+                        .stroke(
+                            tick == 0 ? Color.secondary.opacity(0.45) : Color.secondary.opacity(0.18),
+                            lineWidth: tick == 0 ? 1.2 : 0.8
+                        )
+                    }
+
+                    ForEach(frequencyTicks, id: \.self) { tick in
+                        Path { path in
+                            let x = xPosition(for: tick, in: width)
+                            path.move(to: CGPoint(x: x, y: 0))
+                            path.addLine(to: CGPoint(x: x, y: height))
+                        }
+                        .stroke(Color.secondary.opacity(0.12), lineWidth: 0.8)
+                    }
+
+                    if points.count > 1 {
+                        responseFillPath(in: CGSize(width: width, height: height))
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.orange.opacity(isEnabled ? 0.18 : 0.08), Color.clear],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+
+                        responsePath(in: CGSize(width: width, height: height))
+                            .stroke(
+                                isEnabled ? Color.orange : Color.secondary,
+                                style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
+                            )
+                    }
+
+                    ForEach(labeledFrequencyTicks, id: \.self) { tick in
+                        Text(formatFrequency(tick))
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .position(
+                                x: xPosition(for: tick, in: width),
+                                y: height - 8
+                            )
+                    }
+
+                    ForEach(gainTicks, id: \.self) { tick in
+                        Text(formatGain(tick))
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .position(
+                                x: 16,
+                                y: yPosition(for: tick, in: height)
+                            )
+                    }
+                }
+            }
+        }
+    }
+
+    private func responsePath(in size: CGSize) -> Path {
+        var path = Path()
+        guard let first = points.first else { return path }
+
+        path.move(
+            to: CGPoint(
+                x: xPosition(for: first.frequency, in: size.width),
+                y: yPosition(for: first.gainDB, in: size.height)
+            )
+        )
+
+        for point in points.dropFirst() {
+            path.addLine(
+                to: CGPoint(
+                    x: xPosition(for: point.frequency, in: size.width),
+                    y: yPosition(for: point.gainDB, in: size.height)
+                )
+            )
+        }
+
+        return path
+    }
+
+    private func responseFillPath(in size: CGSize) -> Path {
+        var path = Path()
+        guard let first = points.first, let last = points.last else { return path }
+
+        let baselineY = yPosition(for: 0, in: size.height)
+
+        path.move(to: CGPoint(x: xPosition(for: first.frequency, in: size.width), y: baselineY))
+
+        for point in points {
+            path.addLine(
+                to: CGPoint(
+                    x: xPosition(for: point.frequency, in: size.width),
+                    y: yPosition(for: point.gainDB, in: size.height)
+                )
+            )
+        }
+
+        path.addLine(to: CGPoint(x: xPosition(for: last.frequency, in: size.width), y: baselineY))
+        path.closeSubpath()
+        return path
+    }
+
+    private func xPosition(for frequency: Float, in width: CGFloat) -> CGFloat {
+        let clamped = max(EQModel.responseMinFrequency, min(EQModel.responseMaxFrequency, frequency))
+        let minLog = log10f(EQModel.responseMinFrequency)
+        let maxLog = log10f(EQModel.responseMaxFrequency)
+        let valueLog = log10f(clamped)
+        let normalized = (valueLog - minLog) / max(maxLog - minLog, 0.0001)
+        return CGFloat(normalized) * width
+    }
+
+    private func yPosition(for gainDB: Float, in height: CGFloat) -> CGFloat {
+        let clamped = max(gainRange.lowerBound, min(gainRange.upperBound, gainDB))
+        let normalized = (clamped - gainRange.lowerBound) / (gainRange.upperBound - gainRange.lowerBound)
+        return height - (CGFloat(normalized) * height)
+    }
+
+    private func formatFrequency(_ frequency: Float) -> String {
+        if frequency >= 1000 {
+            return "\(Int(frequency / 1000.0))k"
+        }
+        return "\(Int(frequency))"
+    }
+
+    private func formatGain(_ gain: Float) -> String {
+        if gain > 0 {
+            return "+\(Int(gain))"
+        }
+        return "\(Int(gain))"
+    }
+}
+
+private struct SpectrumAnalyzerView: View {
+    let bars: [Float]
+    let isRunning: Bool
+    let sampleRate: Double
+    @Binding var isNormalized: Bool
+
+    private let minFrequency: Float = 20.0
+    private let frequencyTicks: [Float] = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
+    private let labeledFrequencyTicks: [Float] = [31.5, 125, 500, 2000, 8000, 16000]
+    private let amplitudeTicks: [Float] = [0.2, 0.4, 0.6, 0.8]
+    private let chartTopInset: CGFloat = 4
+    private let chartBottomInset: CGFloat = 14
+
+    private var maxFrequency: Float {
+        max(200.0, min(Float(sampleRate * 0.5), 20_000.0))
+    }
+
+    private var displayBars: [Float] {
+        let clampedBars = bars.map { max(0.0, min(1.0, $0)) }
+        guard isNormalized else { return clampedBars }
+
+        guard let peak = clampedBars.max(), peak > 0.001 else {
+            return clampedBars
+        }
+
+        return clampedBars.map { $0 / peak }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Spectrum")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+
+                Toggle("Normalize", isOn: $isNormalized)
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .font(.caption2)
+                    .help("Scale bars so the strongest active frequency reaches the top.")
+
+                Spacer()
+
+                Text(isRunning ? "Live" : "Idle")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(isRunning ? .green : .secondary)
+            }
+
+            GeometryReader { proxy in
+                let width = proxy.size.width
+                let height = proxy.size.height
+
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.08))
+
+                    ForEach(amplitudeTicks, id: \.self) { tick in
+                        Path { path in
+                            let y = yPosition(for: tick, in: height)
+                            path.move(to: CGPoint(x: 0, y: y))
+                            path.addLine(to: CGPoint(x: width, y: y))
+                        }
+                        .stroke(Color.secondary.opacity(0.1), lineWidth: 0.8)
+                    }
+
+                    ForEach(frequencyTicks.filter { $0 <= maxFrequency }, id: \.self) { tick in
+                        Path { path in
+                            let x = xPosition(for: tick, in: width)
+                            path.move(to: CGPoint(x: x, y: 0))
+                            path.addLine(to: CGPoint(x: x, y: height))
+                        }
+                        .stroke(Color.secondary.opacity(0.12), lineWidth: 0.8)
+                    }
+
+                    if displayBars.count > 1 {
+                        spectrumFillPath(in: CGSize(width: width, height: height))
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.cyan.opacity(0.26),
+                                        Color.orange.opacity(0.18),
+                                        Color.clear
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+
+                        spectrumPath(in: CGSize(width: width, height: height))
+                            .stroke(Color.cyan.opacity(0.24), lineWidth: 3.8)
+
+                        spectrumPath(in: CGSize(width: width, height: height))
+                            .stroke(
+                                LinearGradient(
+                                    colors: [Color.cyan, Color.orange],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                ),
+                                style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)
+                            )
+                    }
+
+                    if !isRunning {
+                        Text("Start audio to view spectrum")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+
+                    ForEach(labeledFrequencyTicks.filter { $0 <= maxFrequency }, id: \.self) { tick in
+                        Text(formatFrequency(tick))
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .position(
+                                x: xPosition(for: tick, in: width),
+                                y: height - 5
+                            )
+                    }
+                }
+            }
+        }
+    }
+
+    private func spectrumPath(in size: CGSize) -> Path {
+        var path = Path()
+        guard displayBars.count > 1 else { return path }
+
+        let firstX = xPositionForBar(at: 0, totalBars: displayBars.count, in: size.width)
+        let firstY = yPosition(for: displayBars[0], in: size.height)
+        path.move(to: CGPoint(x: firstX, y: firstY))
+
+        for index in 1..<displayBars.count {
+            let x = xPositionForBar(at: index, totalBars: displayBars.count, in: size.width)
+            let y = yPosition(for: displayBars[index], in: size.height)
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+
+        return path
+    }
+
+    private func spectrumFillPath(in size: CGSize) -> Path {
+        var path = Path()
+        guard displayBars.count > 1 else { return path }
+
+        let baseline = yPosition(for: 0.0, in: size.height)
+        let startX = xPositionForBar(at: 0, totalBars: displayBars.count, in: size.width)
+        path.move(to: CGPoint(x: startX, y: baseline))
+
+        for index in 0..<displayBars.count {
+            let x = xPositionForBar(at: index, totalBars: displayBars.count, in: size.width)
+            let y = yPosition(for: displayBars[index], in: size.height)
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+
+        let endX = xPositionForBar(at: displayBars.count - 1, totalBars: displayBars.count, in: size.width)
+        path.addLine(to: CGPoint(x: endX, y: baseline))
+        path.closeSubpath()
+        return path
+    }
+
+    private func xPositionForBar(at index: Int, totalBars: Int, in width: CGFloat) -> CGFloat {
+        guard totalBars > 1 else { return 0 }
+        let normalized = Float(index) / Float(totalBars - 1)
+        let frequency = minFrequency * powf(maxFrequency / minFrequency, normalized)
+        return xPosition(for: frequency, in: width)
+    }
+
+    private func yPosition(for normalizedValue: Float, in height: CGFloat) -> CGFloat {
+        let clamped = max(0.0, min(1.0, normalizedValue))
+        let chartHeight = max(1.0, height - chartTopInset - chartBottomInset)
+        return chartTopInset + ((1.0 - CGFloat(clamped)) * chartHeight)
+    }
+
+    private func xPosition(for frequency: Float, in width: CGFloat) -> CGFloat {
+        let clamped = max(minFrequency, min(maxFrequency, frequency))
+        let minLog = log10f(minFrequency)
+        let maxLog = log10f(maxFrequency)
+        let valueLog = log10f(clamped)
+        let normalized = (valueLog - minLog) / max(maxLog - minLog, 0.0001)
+        return CGFloat(normalized) * width
+    }
+
+    private func formatFrequency(_ frequency: Float) -> String {
+        if frequency >= 1000 {
+            let value = frequency / 1000.0
+            if value >= 10 {
+                return "\(Int(value))k"
+            }
+            return String(format: "%.1fk", value)
+        }
+
+        return String(format: "%.0f", frequency)
+    }
+}
+
+#Preview {
+    ContentView()
+        .environmentObject(AudioEngine())
+        .environmentObject(EQModel())
+}
