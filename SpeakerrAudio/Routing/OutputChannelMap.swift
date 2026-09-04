@@ -1,5 +1,17 @@
 import Foundation
 
+public enum SpeakerRoutingMode: String, Codable, CaseIterable, Sendable {
+    case stereo
+    case mono
+
+    public var displayName: String {
+        switch self {
+        case .stereo: "Stereo (L / R)"
+        case .mono: "Mono (same signal)"
+        }
+    }
+}
+
 enum ChannelSource: Equatable {
     case mono, left, right, silence
 }

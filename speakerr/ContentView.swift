@@ -160,6 +160,14 @@ struct ContentView: View {
         .onChange(of: presetManager.customPresets) { newPresets in
             eqModel.resolvePresetSelection(using: newPresets)
         }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("speakerrOutputDevicesChanged"))) { _ in
+            if let savedUIDs = settingsStore.load()?.selectedOutputDeviceUIDs {
+                if savedUIDs != selectedOutputDeviceUIDs {
+                    selectedOutputDeviceUIDs = savedUIDs
+                    applyOutputDevicesSelection()
+                }
+            }
+        }
         .sheet(isPresented: $showingSavePreset) {
             savePresetSheet
         }
@@ -258,20 +266,83 @@ struct ContentView: View {
     }
 
     private var compactOutputControl: some View {
-        HStack {
-            Text("Output")
-                .foregroundColor(.secondary)
-                .frame(width: 50, alignment: .leading)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Output")
+                    .foregroundColor(.secondary)
+                    .frame(width: 50, alignment: .leading)
 
-            multiSpeakerOutputMenu
+                multiSpeakerOutputMenu
 
-            Button {
-                refreshOutputDevices()
-            } label: {
-                Image(systemName: "arrow.clockwise")
+                Button {
+                    refreshOutputDevices()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .help("Refresh output devices")
             }
-            .buttonStyle(.borderless)
-            .help("Refresh output devices")
+
+            selectedSpeakersPillsView
+        }
+    }
+
+    @ViewBuilder
+    private var selectedSpeakersPillsView: some View {
+        if !selectedOutputDevices.isEmpty {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    ForEach(selectedOutputDevices.indices, id: \.self) { idx in
+                        let dev = selectedOutputDevices[idx]
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(selectedOutputDevices.count > 1 ? (idx == 0 ? Color.blue : Color.green) : Color.accentColor)
+                                .frame(width: 6, height: 6)
+
+                            Text(selectedOutputDevices.count > 1 ? (idx == 0 ? "L: " : "R: ") + dev.name : dev.name)
+                                .font(.caption.weight(.medium))
+                                .lineLimit(1)
+
+                            Button {
+                                toggleOutputDevice(dev)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.secondary)
+                                    .font(.system(size: 11))
+                            }
+                            .buttonStyle(.plain)
+                            .help("Remove \(dev.name)")
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color.secondary.opacity(0.12))
+                        .cornerRadius(12)
+                    }
+
+                    if selectedOutputDevices.count == 2 {
+                        Button {
+                            MainWindowCoordinator.shared.show()
+                        } label: {
+                            Label("Calibrate…", systemImage: "waveform.badge.mic")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .help("Calibrate and align acoustic delay between speakers")
+                    }
+                }
+
+                if selectedOutputDevices.count == 1 {
+                    Text("Tip: Select a 2nd speaker to enable dual-speaker acoustic alignment.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                } else if selectedOutputDevices.count == 2 {
+                    Text("Dual-speaker aligned pair active: Left (Ch 1) • Right (Ch 2)")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.leading, 54)
         }
     }
 
@@ -286,6 +357,16 @@ struct ContentView: View {
                             Text(device.name)
                             if selectedOutputDeviceUIDs.contains(device.uid) {
                                 Image(systemName: "checkmark")
+                            }
+                        }
+                        if selectedOutputDeviceUIDs.count == 2 {
+                            Picker("Playback Mode", selection: Binding(
+                                get: { SpeakerrStore.model.preferences.routingMode },
+                                set: { SpeakerrStore.model.setRoutingMode($0) }
+                            )) {
+                                ForEach(SpeakerRoutingMode.allCases, id: \.self) { mode in
+                                    Text(mode.displayName).tag(mode)
+                                }
                             }
                         }
                     }
@@ -539,22 +620,43 @@ struct ContentView: View {
         .help("Real-time post-EQ spectrum (before output gain, limiter, and final volume).")
     }
 
+    private var eqTargetDescriptionText: String {
+        if selectedEQTargetUID == "master" {
+            return "Master EQ: Applied across all output speakers"
+        } else if let index = selectedOutputDeviceUIDs.firstIndex(of: selectedEQTargetUID),
+                  selectedOutputDevices.indices.contains(index) {
+            let channel = index == 0 ? "Left Channel" : "Right Channel"
+            return "Route EQ: Tuning \(channel) (\(selectedOutputDevices[index].name))"
+        }
+        return ""
+    }
+
     private var eqSliders: some View {
         VStack(spacing: 6) {
             if selectedOutputDevices.count > 1 {
-                HStack(spacing: 6) {
-                    Text("EQ Target:")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                VStack(spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text("EQ Target:")
+                            .font(.caption.weight(.medium))
+                            .foregroundColor(.secondary)
 
-                    Picker("", selection: selectedEQTargetBinding) {
-                        Text("Master (All)").tag("master")
-                        ForEach(selectedOutputDevices) { device in
-                            Text(device.name).tag(device.uid)
+                        Picker("", selection: selectedEQTargetBinding) {
+                            Text("Master (All)").tag("master")
+                            if selectedOutputDevices.indices.contains(0) {
+                                Text("Left: \(selectedOutputDevices[0].name)").tag(selectedOutputDevices[0].uid)
+                            }
+                            if selectedOutputDevices.indices.contains(1) {
+                                Text("Right: \(selectedOutputDevices[1].name)").tag(selectedOutputDevices[1].uid)
+                            }
                         }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
+
+                    Text(eqTargetDescriptionText)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.bottom, 2)
             }
@@ -1168,6 +1270,8 @@ struct ContentView: View {
                 .help("Refresh output devices")
             }
 
+            selectedSpeakersPillsView
+
             Divider()
 
             VStack(alignment: .leading, spacing: 4) {
@@ -1680,6 +1784,8 @@ struct ContentView: View {
             selectedOutputDeviceUIDs.remove(at: idx)
         } else if selectedOutputDeviceUIDs.count < 2 {
             selectedOutputDeviceUIDs.append(device.uid)
+        } else {
+            selectedOutputDeviceUIDs[1] = device.uid
         }
         applyOutputDevicesSelection()
     }
@@ -1690,6 +1796,7 @@ struct ContentView: View {
     }
 
     private func switchEQTarget(to target: String) {
+        eqModel.saveCurrentAsDeviceProfile()
         selectedEQTargetUID = target
         if target == "master" {
             eqModel.onDeviceChanged(deviceUID: "master", deviceName: "Master EQ")
@@ -1744,16 +1851,25 @@ struct ContentView: View {
         if let masterProfile = DeviceProfileManager.shared.profile(for: "master") {
             SpeakerrStore.model.updateMasterEQ(bands: masterProfile.effectiveBands)
             SpeakerrStore.model.updateMasterEQBypass(!masterProfile.isEQEnabled || !masterProfile.isEQFiltersEnabled)
+        } else {
+            SpeakerrStore.model.updateMasterEQ(bands: EQBand.defaultTenBand)
+            SpeakerrStore.model.updateMasterEQBypass(false)
         }
         let uid0 = selectedOutputDeviceUIDs[0]
         if let prof0 = DeviceProfileManager.shared.profile(for: uid0) {
             SpeakerrStore.model.updateRouteEQ(route: 0, bands: prof0.effectiveBands)
             SpeakerrStore.model.updateRouteEQBypass(route: 0, bypass: !prof0.isEQEnabled || !prof0.isEQFiltersEnabled)
+        } else {
+            SpeakerrStore.model.updateRouteEQ(route: 0, bands: EQBand.defaultTenBand)
+            SpeakerrStore.model.updateRouteEQBypass(route: 0, bypass: false)
         }
         let uid1 = selectedOutputDeviceUIDs[1]
         if let prof1 = DeviceProfileManager.shared.profile(for: uid1) {
             SpeakerrStore.model.updateRouteEQ(route: 1, bands: prof1.effectiveBands)
             SpeakerrStore.model.updateRouteEQBypass(route: 1, bypass: !prof1.isEQEnabled || !prof1.isEQFiltersEnabled)
+        } else {
+            SpeakerrStore.model.updateRouteEQ(route: 1, bands: EQBand.defaultTenBand)
+            SpeakerrStore.model.updateRouteEQBypass(route: 1, bypass: false)
         }
     }
 

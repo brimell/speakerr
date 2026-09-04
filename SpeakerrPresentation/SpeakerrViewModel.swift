@@ -24,6 +24,7 @@ public struct SystemMicrophonePermissionProvider: MicrophonePermissionProviding 
 public final class SpeakerrPreferences {
     public var launchAtLogin: Bool { didSet { defaults.set(launchAtLogin, forKey: Keys.launchAtLogin) } }
     public var selectedSpeakerUIDs: [String] { didSet { defaults.set(selectedSpeakerUIDs, forKey: Keys.speakers) } }
+    public var routingMode: SpeakerRoutingMode { didSet { defaults.set(routingMode.rawValue, forKey: Keys.routingMode) } }
     public var preferredMicrophoneUID: String? { didSet { defaults.set(preferredMicrophoneUID, forKey: Keys.microphone) } }
     public var programmeInputUID: String? { didSet { defaults.set(programmeInputUID, forKey: Keys.programmeInput) } }
     public var calibrationVolume: Double { didSet { defaults.set(calibrationVolume, forKey: Keys.volume) } }
@@ -39,6 +40,7 @@ public final class SpeakerrPreferences {
         self.defaults = defaults
         launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)
         selectedSpeakerUIDs = defaults.stringArray(forKey: Keys.speakers) ?? []
+        routingMode = SpeakerRoutingMode(rawValue: defaults.string(forKey: Keys.routingMode) ?? "") ?? .stereo
         preferredMicrophoneUID = defaults.string(forKey: Keys.microphone)
         programmeInputUID = defaults.string(forKey: Keys.programmeInput)
         calibrationVolume = defaults.object(forKey: Keys.volume) as? Double ?? 0.12
@@ -52,6 +54,7 @@ public final class SpeakerrPreferences {
     private enum Keys {
         static let launchAtLogin = "launchAtLogin"
         static let speakers = "selectedSpeakerUIDs"
+        static let routingMode = "speakerRoutingMode"
         static let microphone = "preferredMicrophoneUID"
         static let programmeInput = "programmeInputUID"
         static let volume = "calibrationVolume"
@@ -139,6 +142,14 @@ public final class SpeakerrViewModel {
         start()
     }
 
+    public func setRoutingMode(_ mode: SpeakerRoutingMode) {
+        guard preferences.routingMode != mode else { return }
+        preferences.routingMode = mode
+        if preferences.selectedSpeakerUIDs.count == 2 {
+            start()
+        }
+    }
+
     public func start() {
         guard preferences.selectedSpeakerUIDs.count == 2 else {
             isSpeakerSelectionPresented = true
@@ -148,7 +159,7 @@ public final class SpeakerrViewModel {
         isBusy = true
         Task {
             do {
-                try await controller.start(outputUIDs: preferences.selectedSpeakerUIDs, programmeInputUID: preferences.programmeInputUID, calibrationLevel: preferences.calibrationVolume)
+                try await controller.start(outputUIDs: preferences.selectedSpeakerUIDs, programmeInputUID: preferences.programmeInputUID, calibrationLevel: preferences.calibrationVolume, routingMode: preferences.routingMode)
                 calibrationOutcome = .none
             } catch {
                 present(error)

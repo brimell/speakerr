@@ -17,7 +17,7 @@ private actor MockSpeakerSessionController: SpeakerSessionControlling {
     }
 
     func snapshot() -> SessionControllerSnapshot { currentSnapshot }
-    func start(outputUIDs: [String], programmeInputUID: String?, calibrationLevel: Double) { startCount += 1 }
+    func start(outputUIDs: [String], programmeInputUID: String?, calibrationLevel: Double, routingMode: SpeakerRoutingMode) { startCount += 1 }
     func stop() { stopCount += 1 }
 
     func calibrate(inputUID: String, configuration: CalibrationExperimentConfiguration, progress: @escaping @Sendable (CalibrationProgressUpdate) -> Void) async throws -> [CalibrationPassMeasurements] {

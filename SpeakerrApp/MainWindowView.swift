@@ -98,6 +98,11 @@ struct MainWindowView: View {
                     }
                 }
             }
+            Picker("Playback mode", selection: Binding(get: { model.preferences.routingMode }, set: { model.setRoutingMode($0) })) {
+                ForEach(SpeakerRoutingMode.allCases, id: \.self) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
             Button("Change Speakers…") { model.isSpeakerSelectionPresented = true }
         }
     }

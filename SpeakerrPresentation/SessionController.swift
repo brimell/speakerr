@@ -22,7 +22,7 @@ public struct SessionControllerSnapshot: Sendable {
 
 public protocol SpeakerSessionControlling: Sendable {
     func snapshot() async throws -> SessionControllerSnapshot
-    func start(outputUIDs: [String], programmeInputUID: String?, calibrationLevel: Double) async throws
+    func start(outputUIDs: [String], programmeInputUID: String?, calibrationLevel: Double, routingMode: SpeakerRoutingMode) async throws
     func stop() async
     func calibrate(inputUID: String, configuration: CalibrationExperimentConfiguration, progress: @escaping @Sendable (CalibrationProgressUpdate) -> Void) async throws -> [CalibrationPassMeasurements]
     func recheck(inputUID: String, configuration: CalibrationExperimentConfiguration) async throws -> CalibrationPassMeasurements
@@ -78,7 +78,7 @@ public actor CoreAudioSpeakerSessionController: SpeakerSessionControlling {
         )
     }
 
-    public func start(outputUIDs: [String], programmeInputUID: String?, calibrationLevel: Double) throws {
+    public func start(outputUIDs: [String], programmeInputUID: String?, calibrationLevel: Double, routingMode: SpeakerRoutingMode = .stereo) throws {
         guard outputUIDs.count == 2, outputUIDs[0] != outputUIDs[1] else { throw SessionControllerError.requiresExactlyTwoOutputs }
         stop()
         let discovery = AudioDeviceDiscovery()
@@ -87,7 +87,7 @@ public actor CoreAudioSpeakerSessionController: SpeakerSessionControlling {
             guard let output = outputs.first(where: { $0.id == uid }) else { throw SessionControllerError.outputUnavailable(uid) }
             return output
         }
-        let created = try PersistentSpeakerSession(outputs: selectedOutputs)
+        let created = try PersistentSpeakerSession(outputs: selectedOutputs, routingMode: routingMode)
         if let master = masterEQBands { created.setMasterEQBands(master) }
         created.setMasterEQBypass(masterEQBypass)
         for (route, bands) in routeEQBands { created.setRouteEQBands(route: route, bands: bands) }

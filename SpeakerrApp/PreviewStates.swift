@@ -7,7 +7,7 @@ private actor PreviewSessionController: SpeakerSessionControlling {
     let value: SessionControllerSnapshot
     init(_ value: SessionControllerSnapshot) { self.value = value }
     func snapshot() -> SessionControllerSnapshot { value }
-    func start(outputUIDs: [String], programmeInputUID: String?, calibrationLevel: Double) throws {}
+    func start(outputUIDs: [String], programmeInputUID: String?, calibrationLevel: Double, routingMode: SpeakerRoutingMode) throws {}
     func stop() {}
     func calibrate(inputUID: String, configuration: CalibrationExperimentConfiguration, progress: @escaping @Sendable (CalibrationProgressUpdate) -> Void) async throws -> [CalibrationPassMeasurements] { throw CancellationError() }
     func recheck(inputUID: String, configuration: CalibrationExperimentConfiguration) async throws -> CalibrationPassMeasurements { throw CancellationError() }

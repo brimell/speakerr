@@ -40,10 +40,13 @@ private final class PersistentRenderState: @unchecked Sendable {
     private var programmePrimed = false
     private var previousMode = PersistentRenderMode.muted
 
-    init(sampleRate: Double, chirp: [Float], transport: StereoRingBuffer, channelCounts: [Int], delays initialDelays: [Double]) throws {
+    private let routingMode: SpeakerRoutingMode
+
+    init(sampleRate: Double, chirp: [Float], transport: StereoRingBuffer, channelCounts: [Int], delays initialDelays: [Double], routingMode: SpeakerRoutingMode) throws {
         self.sampleRate = sampleRate
         self.chirp = chirp
         self.transport = transport
+        self.routingMode = routingMode
         delays = try initialDelays.map { try FractionalDelayLine(sampleRate: sampleRate, initialDelayMilliseconds: $0) }
         assignments = OutputChannelMap.assignments(channelCounts: channelCounts)
         masterEQ = ParametricEQ(sampleRate: sampleRate)
@@ -117,6 +120,13 @@ private final class PersistentRenderState: @unchecked Sendable {
             if programmePrimed {
                 let fetched = transport.read(left: sourceLeft, right: sourceRight, frameCount: count)
                 if fetched < count { programmePrimed = false }
+                if routingMode == .mono {
+                    for frame in 0..<count {
+                        let mono = (sourceLeft[frame] + sourceRight[frame]) * 0.5
+                        sourceLeft[frame] = mono
+                        sourceRight[frame] = mono
+                    }
+                }
                 masterEQ.process(buffer: sourceLeft, frameCount: count, channel: 0)
                 masterEQ.process(buffer: sourceRight, frameCount: count, channel: 1)
             }
@@ -230,18 +240,20 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
     private var running = false
     private var rebuilding = false
     private var lifecycleMonitor: CoreAudioDeviceMonitor?
+    private let routingMode: SpeakerRoutingMode
 
     private var pendingMasterBands: [EQBand]?
     private var pendingMasterBypass: Bool = false
     private var pendingRouteBands: [Int: [EQBand]] = [:]
     private var pendingRouteBypass: [Int: Bool] = [:]
 
-    public init(outputs: [OutputDevice], generation: UInt64 = 1, transportCapacityFrames: Int = 44_100) throws {
+    public init(outputs: [OutputDevice], generation: UInt64 = 1, transportCapacityFrames: Int = 44_100, routingMode: SpeakerRoutingMode = .stereo) throws {
         guard outputs.count == 2 else { throw AudioRoutingError.requiresExactlyTwoOutputs }
         guard outputs[0].id != outputs[1].id else { throw AudioRoutingError.duplicateOutput }
         self.outputs = outputs
         outputUIDs = outputs.map(\.id)
         self.generation = generation
+        self.routingMode = routingMode
         transport = StereoRingBuffer(capacityFrames: transportCapacityFrames)
         estimator = NormalizedCrossCorrelationEstimator()
         delayComponents = try outputs.map { try DelayComponents(manual: $0.delayMilliseconds) }
@@ -276,7 +288,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             let aggregate = try aggregateManager.create(outputs: outputs)
             sampleRate = aggregate.sampleRate
             let chirp = try LogarithmicChirpGenerator(level: calibrationLevel).generate(sampleRate: sampleRate)
-            let state = try PersistentRenderState(sampleRate: sampleRate, chirp: chirp.samples, transport: transport, channelCounts: aggregate.channelCounts, delays: delayComponents.map(\.effectiveMilliseconds))
+            let state = try PersistentRenderState(sampleRate: sampleRate, chirp: chirp.samples, transport: transport, channelCounts: aggregate.channelCounts, delays: delayComponents.map(\.effectiveMilliseconds), routingMode: routingMode)
             if let master = pendingMasterBands { state.setMasterEQBands(master) }
             state.setMasterEQBypass(pendingMasterBypass)
             for (route, bands) in pendingRouteBands { state.setRouteEQBands(route: route, bands: bands) }
