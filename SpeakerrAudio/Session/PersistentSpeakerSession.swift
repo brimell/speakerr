@@ -244,10 +244,12 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         delayComponents[index] = value
     }
 
-    public func performCalibration(input: InputDevice, configuration: CalibrationExperimentConfiguration = .init()) async throws -> [CalibrationPassMeasurements] {
+    public func performCalibration(input: InputDevice, configuration: CalibrationExperimentConfiguration = .init(), progress: (@Sendable (CalibrationProgressUpdate) -> Void)? = nil) async throws -> [CalibrationPassMeasurements] {
         try configuration.validate()
         guard running, let reference, let renderState else { throw AudioRoutingError.notConfigured }
         guard abs(input.sampleRate - sampleRate) < 0.01 else { throw CalibrationSessionError.requiresMatchingSampleRates(output: sampleRate, input: input.sampleRate) }
+        let priorState = stateMachine.state
+        let priorDelays = delayComponents
         programmeCapture?.pause()
         transport.discardAll()
         renderState.setMode(.calibration)
@@ -260,14 +262,16 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             microphone.stop()
             microphoneCapture = nil
         }
-        await waitForRenderedFrames(renderState.renderedFrames.load(ordering: .acquiring) + Int64(configuration.preRollSeconds * sampleRate))
+        try await waitForRenderedFrames(renderState.renderedFrames.load(ordering: .acquiring) + Int64(configuration.preRollSeconds * sampleRate))
 
         var passes: [CalibrationPassMeasurements] = []
         var residuals: [Double] = []
         let convergence = ConvergenceController(targetResidualMilliseconds: configuration.targetResidualMilliseconds, maximumPasses: configuration.maximumPasses)
         do {
             for pass in 0..<configuration.maximumPasses {
-                let measured = try await measurePass(pass: pass, configuration: configuration, microphone: microphone, reference: reference)
+                try Task.checkCancellation()
+                if pass > 0 { progress?(.init(phase: .verifying(pass: pass + 1))) }
+                let measured = try await measurePass(pass: pass, configuration: configuration, microphone: microphone, reference: reference, progress: progress)
                 passes.append(measured)
                 let residual = measured.relativeArrivalBMinusAMilliseconds
                 residuals.append(residual)
@@ -279,11 +283,17 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                     return passes
                 }
                 guard convergence.shouldContinue(residuals: residuals) else { break }
+                progress?(.init(phase: .applyingCorrection(residualMilliseconds: residual)))
                 try applyResidual(residual)
             }
             let residual = residuals.last ?? .infinity
             _ = try stateMachine.handle(.calibrationFailed("residual \(residual) ms"))
             throw CalibrationSessionError.didNotConverge(residualMilliseconds: residual)
+        } catch is CancellationError {
+            for index in priorDelays.indices { try? setDelayComponents(index: index, value: priorDelays[index]) }
+            if case .calibrating = stateMachine.state { _ = try? stateMachine.handle(.cancelCalibration(priorState)) }
+            resumeProgramme()
+            throw CancellationError()
         } catch {
             if case .calibrating = stateMachine.state { _ = try? stateMachine.handle(.calibrationFailed(error.localizedDescription)) }
             resumeProgramme()
@@ -298,8 +308,8 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         microphoneCapture = microphone
         try microphone.start()
         defer { microphone.stop(); microphoneCapture = nil; resumeProgramme() }
-        if let renderState { await waitForRenderedFrames(renderState.renderedFrames.load(ordering: .acquiring) + Int64(configuration.preRollSeconds * sampleRate)) }
-        return try await measurePass(pass: 0, configuration: configuration, microphone: microphone, reference: reference!)
+        if let renderState { try await waitForRenderedFrames(renderState.renderedFrames.load(ordering: .acquiring) + Int64(configuration.preRollSeconds * sampleRate)) }
+        return try await measurePass(pass: 0, configuration: configuration, microphone: microphone, reference: reference!, progress: nil)
     }
 
     public func applyDynamicCorrection(relativeResidualBMinusA residual: Double) throws {
@@ -341,12 +351,14 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         return PersistentSessionStatus(generation: generation, sampleRate: sampleRate, state: stateMachine.state, delays: delayComponents, calibration: calibrationSnapshot, transport: transport.counters(), renderCallbacks: renderState?.callbackCount.load(ordering: .relaxed) ?? 0, renderError: error == noErr ? nil : error)
     }
 
-    private func measurePass(pass: Int, configuration: CalibrationExperimentConfiguration, microphone: ContinuousMicrophoneCapture, reference: CalibrationSignal) async throws -> CalibrationPassMeasurements {
+    private func measurePass(pass: Int, configuration: CalibrationExperimentConfiguration, microphone: ContinuousMicrophoneCapture, reference: CalibrationSignal, progress: (@Sendable (CalibrationProgressUpdate) -> Void)?) async throws -> CalibrationPassMeasurements {
         var values = [[AcousticMeasurement](), [AcousticMeasurement]()]
         var failures: [String] = []
         let maximumAttempts = configuration.measurementsPerSpeaker + configuration.maximumRetriesPerSpeaker
         for attempt in 0..<maximumAttempts {
+            try Task.checkCancellation()
             for speaker in 0..<2 where values[speaker].count < configuration.measurementsPerSpeaker {
+                progress?(.init(phase: .measuring(speakerIndex: speaker, speakerName: outputs[speaker].name, pass: pass + 1, totalPasses: configuration.maximumPasses, measurement: values[speaker].count + 1, totalMeasurements: configuration.measurementsPerSpeaker)))
                 do { values[speaker].append(try await emitAndMeasure(pass: pass, sequence: attempt * 2 + speaker, speaker: speaker, configuration: configuration, microphone: microphone, reference: reference)) }
                 catch { failures.append("pass=\(pass + 1) attempt=\(attempt + 1) speaker=\(speaker): \(error.localizedDescription)") }
             }
@@ -367,7 +379,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         let host = renderState.emissionHostTime.load(ordering: .acquiring)
         let startFrame = renderState.emissionStartFrame.load(ordering: .acquiring)
         let completion = startFrame + Int64(reference.samples.count) + Int64(configuration.maximumAcousticLatencySeconds * sampleRate)
-        await waitForRenderedFrames(completion)
+        try await waitForRenderedFrames(completion)
         let captured = try microphone.snapshot()
         let scheduledInput = try captured.sampleIndex(atHostTime: host)
         let preSearch = Int(0.02 * sampleRate)
@@ -401,9 +413,10 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         }
     }
 
-    private func waitForRenderedFrames(_ target: Int64) async {
+    private func waitForRenderedFrames(_ target: Int64) async throws {
         while (renderState?.renderedFrames.load(ordering: .acquiring) ?? target) < target {
-            try? await Task.sleep(for: .milliseconds(10))
+            try Task.checkCancellation()
+            try await Task.sleep(for: .milliseconds(10))
         }
     }
 
