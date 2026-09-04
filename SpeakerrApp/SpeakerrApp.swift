@@ -2,27 +2,65 @@ import AppKit
 import SpeakerrPresentation
 import SwiftUI
 
+@MainActor
+private enum AppModelStore {
+    static let model = SpeakerrViewModel()
+}
+
+final class SpeakerrAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        Task { @MainActor in
+            let model = AppModelStore.model
+            model.beginMonitoring()
+            await model.refresh()
+            model.startSavedSessionIfNeeded()
+            MainWindowCoordinator.shared.show(model: model)
+        }
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+}
+
+@MainActor
+final class MainWindowCoordinator: NSObject, NSWindowDelegate {
+    static let shared = MainWindowCoordinator()
+    private var window: NSWindow?
+
+    func show(model: SpeakerrViewModel) {
+        if let window {
+            window.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            return
+        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 680, height: 610),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Speakerr"
+        window.minSize = NSSize(width: 620, height: 520)
+        window.contentView = NSHostingView(rootView: MainWindowView(model: model))
+        window.delegate = self
+        window.isReleasedWhenClosed = false
+        window.setFrameAutosaveName("SpeakerrMainWindow")
+        window.center()
+        self.window = window
+        window.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+}
+
 @main
 struct SpeakerrApp: App {
-    @State private var model = SpeakerrViewModel()
+    @NSApplicationDelegateAdaptor(SpeakerrAppDelegate.self) private var appDelegate
+    @State private var model = AppModelStore.model
 
     var body: some Scene {
         MenuBarExtra("Speakerr", systemImage: menuBarSymbol) {
             MenuBarContent(model: model)
         }
         .menuBarExtraStyle(.menu)
-
-        Window("Speakerr", id: "main") {
-            MainWindowView(model: model)
-                .frame(minWidth: 620, idealWidth: 680, minHeight: 520, idealHeight: 610)
-                .task {
-                    model.beginMonitoring()
-                    await model.refresh()
-                    model.startSavedSessionIfNeeded()
-                }
-        }
-        .defaultSize(width: 680, height: 610)
-        .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(after: .appSettings) {
                 Button("Recheck Alignment") { model.recheck() }
@@ -52,7 +90,6 @@ struct SpeakerrApp: App {
 
 private struct MenuBarContent: View {
     @Bindable var model: SpeakerrViewModel
-    @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
@@ -69,10 +106,10 @@ private struct MenuBarContent: View {
             }
         }
         Divider()
-        Button("Open Speakerr") { openWindow(id: "main") }
+        Button("Open Speakerr") { MainWindowCoordinator.shared.show(model: model) }
         Button("Calibrate…") {
             model.isCalibrationPresented = true
-            openWindow(id: "main")
+            MainWindowCoordinator.shared.show(model: model)
         }
         .disabled(model.presentation.speakers.count != 2 || model.presentation.status == .waitingForSpeaker)
         Button("Recheck Alignment") { model.recheck() }
