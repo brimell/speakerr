@@ -80,7 +80,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.brimell.speakerr.menu
-        PRODUCT_NAME: Speakerr
+        PRODUCT_NAME: SpeakerrMenuApp
         MACOSX_DEPLOYMENT_TARGET: "15.0"
         SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: YES
