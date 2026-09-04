@@ -2,7 +2,7 @@ import CoreAudio
 import Foundation
 import SpeakerrAudio
 
-public struct SessionControllerSnapshot: Sendable, Equatable {
+public struct SessionControllerSnapshot: Sendable {
     public let status: PersistentSessionStatus?
     public let selectedOutputs: [OutputDevice]
     public let availableOutputs: [OutputDevice]

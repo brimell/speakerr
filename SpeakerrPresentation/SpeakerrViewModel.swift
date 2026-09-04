@@ -6,6 +6,7 @@ import SpeakerrAudio
 @MainActor
 @Observable
 public final class SpeakerrPreferences {
+    public var launchAtLogin: Bool { didSet { defaults.set(launchAtLogin, forKey: Keys.launchAtLogin) } }
     public var selectedSpeakerUIDs: [String] { didSet { defaults.set(selectedSpeakerUIDs, forKey: Keys.speakers) } }
     public var preferredMicrophoneUID: String? { didSet { defaults.set(preferredMicrophoneUID, forKey: Keys.microphone) } }
     public var programmeInputUID: String? { didSet { defaults.set(programmeInputUID, forKey: Keys.programmeInput) } }
@@ -20,6 +21,7 @@ public final class SpeakerrPreferences {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)
         selectedSpeakerUIDs = defaults.stringArray(forKey: Keys.speakers) ?? []
         preferredMicrophoneUID = defaults.string(forKey: Keys.microphone)
         programmeInputUID = defaults.string(forKey: Keys.programmeInput)
@@ -32,6 +34,7 @@ public final class SpeakerrPreferences {
     }
 
     private enum Keys {
+        static let launchAtLogin = "launchAtLogin"
         static let speakers = "selectedSpeakerUIDs"
         static let microphone = "preferredMicrophoneUID"
         static let programmeInput = "programmeInputUID"
@@ -64,16 +67,16 @@ public final class SpeakerrViewModel {
     private var calibrationTask: Task<Void, Never>?
     private var latestRecheckResidual: Double?
     private var isPaused = false
+    private var attemptedSavedSessionStart = false
 
-    public init(controller: any SpeakerSessionControlling = CoreAudioSpeakerSessionController(), preferences: SpeakerrPreferences? = nil) {
+    public init(controller: any SpeakerSessionControlling = CoreAudioSpeakerSessionController(), preferences: SpeakerrPreferences? = nil, initialPresentation: SpeakerrPresentationState = .init(), initialCalibrationOutcome: CalibrationOutcome = .none, microphonePermissionDenied: Bool = false) {
         self.controller = controller
         self.preferences = preferences ?? SpeakerrPreferences()
+        presentation = initialPresentation
+        calibrationOutcome = initialCalibrationOutcome
+        self.microphonePermissionDenied = microphonePermissionDenied
     }
 
-    deinit {
-        pollingTask?.cancel()
-        calibrationTask?.cancel()
-    }
 
     public func beginMonitoring() {
         guard pollingTask == nil else { return }
@@ -106,6 +109,12 @@ public final class SpeakerrViewModel {
         }
     }
 
+    public func startSavedSessionIfNeeded() {
+        guard !attemptedSavedSessionStart else { return }
+        attemptedSavedSessionStart = true
+        if preferences.selectedSpeakerUIDs.count == 2 { start() }
+    }
+
     public func useSelectedSpeakers(_ uids: [String]) {
         guard uids.count == 2 else { return }
         preferences.selectedSpeakerUIDs = uids
@@ -133,10 +142,12 @@ public final class SpeakerrViewModel {
     }
 
     public func pause() {
-        calibrationTask?.cancel()
+        let activeCalibration = calibrationTask
+        activeCalibration?.cancel()
         isPaused = true
         isBusy = true
         Task {
+            await activeCalibration?.value
             await controller.stop()
             isBusy = false
             await refresh()

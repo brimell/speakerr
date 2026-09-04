@@ -168,6 +168,17 @@ public struct PersistentSessionStatus: Sendable {
     public let transport: AudioTransportCounters
     public let renderCallbacks: UInt64
     public let renderError: OSStatus?
+
+    public init(generation: UInt64, sampleRate: Double, state: SpeakerSessionState, delays: [DelayComponents], calibration: CalibrationSnapshot?, transport: AudioTransportCounters = .init(), renderCallbacks: UInt64 = 0, renderError: OSStatus? = nil) {
+        self.generation = generation
+        self.sampleRate = sampleRate
+        self.state = state
+        self.delays = delays
+        self.calibration = calibration
+        self.transport = transport
+        self.renderCallbacks = renderCallbacks
+        self.renderError = renderError
+    }
 }
 
 public final class PersistentSpeakerSession: @unchecked Sendable {
