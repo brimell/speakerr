@@ -68,6 +68,8 @@ xcodebuild -project speakerr.xcodeproj -scheme speakerr-test -configuration Debu
 
 See [Phase 0–1 prototype](docs/PHASE_0_1.md) for architecture, controls, limitations, tests, and the two-speaker reproduction procedure.
 
+Phases 2–5 add automatic microphone-based calibration through `speakerr-test calibrate`. See [Phase 2–5 calibration](docs/PHASE_2_5.md) for the host-time timing model, CLI options, estimator limits, and measured Bose/MIDDLETON stability results.
+
 ## Installation
 
 ### Step 1: Install BlackHole
