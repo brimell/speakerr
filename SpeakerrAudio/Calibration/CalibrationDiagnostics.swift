@@ -61,7 +61,7 @@ public enum CalibrationDiagnosticWriter {
         data.appendLE(channelCount)
         data.appendLE(UInt32(sampleRate.rounded()))
         data.appendLE(UInt32(sampleRate.rounded()) * bytesPerSample * UInt32(channelCount))
-        data.appendLE(bytesPerSample * UInt32(channelCount))
+        data.appendLE(UInt16(bytesPerSample) * channelCount)
         data.appendLE(bitsPerSample)
         data.appendASCII("data")
         data.appendLE(dataSize)
