@@ -276,7 +276,7 @@ struct SpeakerrTest {
             await session.stop()
             throw error
         }
-        if !success { throw CalibrationSessionError.insufficientValidMeasurements(speaker: "calibration convergence", valid: 0, required: 1) }
+        if !success { throw CalibrationSessionError.didNotConverge(residualMilliseconds: residuals.last ?? .infinity) }
     }
 
     private static func printPass(_ pass: CalibrationPassMeasurements, outputs: [OutputDevice], verbose: Bool) {

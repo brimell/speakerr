@@ -61,7 +61,9 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
     }
 
     public var maximumSessionSeconds: Double {
-        passStartSeconds(maximumPasses - 1) + Double(eventsPerPass) * intervalSeconds + postRollSeconds + 1
+        // Analysis runs while the streams remain alive. Reserve bounded headroom so a
+        // slower debug build cannot overrun capture while writing diagnostics.
+        passStartSeconds(maximumPasses - 1) + Double(eventsPerPass) * intervalSeconds + postRollSeconds + 15
     }
 }
 
@@ -108,6 +110,7 @@ public enum CalibrationSessionError: LocalizedError {
     case captureOverflow
     case renderFailed(OSStatus)
     case insufficientValidMeasurements(speaker: String, valid: Int, required: Int)
+    case didNotConverge(residualMilliseconds: Double)
 
     public var errorDescription: String? {
         switch self {
@@ -118,6 +121,7 @@ public enum CalibrationSessionError: LocalizedError {
         case .captureOverflow: "The preallocated microphone capture buffer overflowed."
         case .renderFailed(let status): "A realtime audio callback failed with CoreAudio status \(status)."
         case .insufficientValidMeasurements(let speaker, let valid, let required): "\(speaker) produced only \(valid) valid measurements; \(required) are required."
+        case .didNotConverge(let residual): "Calibration did not converge within the bounded pass limit (residual=\(String(format: "%.2f", abs(residual))) ms)."
         }
     }
 }
