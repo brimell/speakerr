@@ -20,6 +20,22 @@ targets:
         MACH_O_TYPE: staticlib
         CODE_SIGNING_ALLOWED: NO
 
+  SpeakerrPresentation:
+    type: framework
+    platform: macOS
+    sources:
+      - SpeakerrPresentation
+    dependencies:
+      - target: SpeakerrAudio
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.brimell.speakerr.presentation
+        PRODUCT_NAME: SpeakerrPresentation
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        SWIFT_VERSION: "6.0"
+        MACH_O_TYPE: staticlib
+        CODE_SIGNING_ALLOWED: NO
+
   speakerr-test:
     type: tool
     platform: macOS
@@ -42,6 +58,7 @@ targets:
       - SpeakerrTests
     dependencies:
       - target: SpeakerrAudio
+      - target: SpeakerrPresentation
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.brimell.speakerr.audio-tests
