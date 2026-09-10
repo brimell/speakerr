@@ -2,6 +2,17 @@ import XCTest
 @testable import SpeakerrAudio
 
 final class CalibrationDiagnosticsTests: XCTestCase {
+    func testAttemptDiagnosticsRoundTripAcceptedAndRejected() throws {
+        let attempts = [
+            CalibrationAttemptDiagnostic(pass: 1, attempt: 1, speakerIndex: 0, speakerName: "Bose", measuredLatencyMilliseconds: 135.42, peak: 0.91, secondBestPeak: 0.22, prominence: 4.13, confidence: 0.96, accepted: true),
+            CalibrationAttemptDiagnostic(pass: 1, attempt: 2, speakerIndex: 1, speakerName: "Marshall", measuredLatencyMilliseconds: 77.11, peak: 0.08, secondBestPeak: 0.07, prominence: 1.14, confidence: 0.19, accepted: false, failureReason: "Correlation confidence is too low")
+        ]
+        let data = try JSONEncoder().encode(attempts)
+        let decoded = try JSONDecoder().decode([CalibrationAttemptDiagnostic].self, from: data)
+        XCTAssertEqual(decoded, attempts)
+        XCTAssertEqual(decoded[1].failureReason, "Correlation confidence is too low")
+    }
+
     func testCalibrationReportIncludesSummaryAndDrift() throws {
         let measurement = AcousticMeasurement(
             emission: CalibrationEmission(pass: 0, sequence: 0, speakerIndex: 0, scheduledOutputFrame: 0, scheduledOutputHostTime: 0),

@@ -69,6 +69,9 @@ struct CalibrationSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             content
+            if !model.calibrationAttempts.isEmpty {
+                diagnostics
+            }
             Spacer(minLength: 4)
             controls
         }
@@ -162,6 +165,80 @@ struct CalibrationSheet: View {
                 .foregroundStyle(.secondary)
             diagnosticsDisclosure(fallback: message)
         }
+    }
+
+    private var diagnostics: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let completion = model.calibrationCompletion {
+                Text("Completed Calibration").font(.headline)
+                Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 4) {
+                    GridRow {
+                        Text("Speaker").font(.caption.weight(.semibold))
+                        Text("Arrival").font(.caption.weight(.semibold))
+                        Text("Applied delay").font(.caption.weight(.semibold))
+                        Text("Residual").font(.caption.weight(.semibold))
+                    }
+                    ForEach(completion.speakers) { row in
+                        GridRow {
+                            Text(row.speakerName)
+                            timing(row.arrivalMilliseconds)
+                            timing(row.appliedDelayMilliseconds)
+                            timing(row.residualMilliseconds, signed: true)
+                        }
+                    }
+                }
+                Text("Residual spread = \(completion.residualSpreadMilliseconds, format: .number.precision(.fractionLength(2))) ms")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("Attempts").font(.headline)
+            ScrollView([.horizontal, .vertical]) {
+                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
+                    GridRow {
+                        Text("Speaker").font(.caption.weight(.semibold))
+                        Text("Attempt").font(.caption.weight(.semibold))
+                        Text("Measured latency").font(.caption.weight(.semibold))
+                        Text("Peak").font(.caption.weight(.semibold))
+                        Text("Second-best").font(.caption.weight(.semibold))
+                        Text("Prominence").font(.caption.weight(.semibold))
+                        Text("Confidence").font(.caption.weight(.semibold))
+                        Text("Result").font(.caption.weight(.semibold))
+                    }
+                    ForEach(model.calibrationAttempts) { attempt in
+                        GridRow {
+                            Text(attempt.speakerName)
+                            Text("\(attempt.attempt)").monospacedDigit()
+                            metric(attempt.measuredLatencyMilliseconds, suffix: " ms")
+                            metric(attempt.peak)
+                            metric(attempt.secondBestPeak)
+                            metric(attempt.prominence)
+                            metric(attempt.confidence)
+                            if attempt.accepted {
+                                Text("Accepted").foregroundStyle(.green)
+                            } else {
+                                Text("Rejected: \(attempt.failureReason ?? "unknown failure")")
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                    }
+                }
+                .font(.caption)
+                .padding(.bottom, 2)
+            }
+            .frame(maxHeight: 150)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func timing(_ value: Double, signed: Bool = false) -> some View {
+        Text(signed ? String(format: "%+.2f ms", value) : String(format: "%.2f ms", value))
+            .monospacedDigit()
+    }
+
+    private func metric(_ value: Double?, suffix: String = "") -> some View {
+        Text(value.map { "\($0, specifier: \"%.3f\")\(suffix)" } ?? "-")
+            .monospacedDigit()
     }
 
     private func diagnosticsDisclosure(fallback: String) -> some View {
