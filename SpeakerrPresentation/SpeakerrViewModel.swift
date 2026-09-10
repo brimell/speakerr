@@ -102,12 +102,13 @@ public final class SpeakerrViewModel {
     private var isPaused = false
     private var attemptedSavedSessionStart = false
 
-    public init(controller: any SpeakerSessionControlling = CoreAudioSpeakerSessionController(), preferences: SpeakerrPreferences? = nil, microphonePermissionProvider: any MicrophonePermissionProviding = SystemMicrophonePermissionProvider(), initialPresentation: SpeakerrPresentationState = .init(), initialCalibrationOutcome: CalibrationOutcome = .none, microphonePermissionDenied: Bool = false) {
+    public init(controller: any SpeakerSessionControlling = CoreAudioSpeakerSessionController(), preferences: SpeakerrPreferences? = nil, microphonePermissionProvider: any MicrophonePermissionProviding = SystemMicrophonePermissionProvider(), initialPresentation: SpeakerrPresentationState = .init(), initialCalibrationOutcome: CalibrationOutcome = .none, initialCalibrationProgress: CalibrationProgressUpdate? = nil, microphonePermissionDenied: Bool = false) {
         self.controller = controller
         self.microphonePermissionProvider = microphonePermissionProvider
         self.preferences = preferences ?? SpeakerrPreferences()
         presentation = initialPresentation
         calibrationOutcome = initialCalibrationOutcome
+        calibrationProgress = initialCalibrationProgress
         self.microphonePermissionDenied = microphonePermissionDenied
     }
 
@@ -271,6 +272,7 @@ public final class SpeakerrViewModel {
                     Task { @MainActor in
                         guard let self, self.calibrationRunID == runID else { return }
                         self.calibrationProgress = update
+                        self.presentation.calibration = .running(update)
                     }
                 }
                 guard calibrationRunID == runID else { return }

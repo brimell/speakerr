@@ -1,4 +1,5 @@
 import Foundation
+import CoreAudio
 
 public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
     public var preRollSeconds: Double
@@ -249,5 +250,134 @@ public enum CalibrationSessionError: LocalizedError {
         case .insufficientValidMeasurements(let speaker, let valid, let required): "\(speaker) produced only \(valid) valid measurements; \(required) are required."
         case .didNotConverge(let residual): "Calibration did not converge within the bounded pass limit (residual=\(String(format: "%.2f", abs(residual))) ms)."
         }
+    }
+}
+
+public struct CalibrationTimingSummary: Sendable, Codable, Equatable {
+    public let preRollMilliseconds: Double
+    public let probeAMilliseconds: Double
+    public let abGapMilliseconds: Double
+    public let probeBMilliseconds: Double
+    public let acousticTailMilliseconds: Double
+    public let postProbeGuardMilliseconds: Double
+    public let estimatorProcessingMilliseconds: Double
+    public let diskWritingMilliseconds: Double
+    public let transitionToNextOutputMilliseconds: Double
+    public let totalElapsedMilliseconds: Double
+    public let emissionCount: Int
+
+    public init(
+        preRollMilliseconds: Double = 0,
+        probeAMilliseconds: Double = 0,
+        abGapMilliseconds: Double = 0,
+        probeBMilliseconds: Double = 0,
+        acousticTailMilliseconds: Double = 0,
+        postProbeGuardMilliseconds: Double = 0,
+        estimatorProcessingMilliseconds: Double = 0,
+        diskWritingMilliseconds: Double = 0,
+        transitionToNextOutputMilliseconds: Double = 0,
+        totalElapsedMilliseconds: Double = 0,
+        emissionCount: Int = 0
+    ) {
+        self.preRollMilliseconds = preRollMilliseconds
+        self.probeAMilliseconds = probeAMilliseconds
+        self.abGapMilliseconds = abGapMilliseconds
+        self.probeBMilliseconds = probeBMilliseconds
+        self.acousticTailMilliseconds = acousticTailMilliseconds
+        self.postProbeGuardMilliseconds = postProbeGuardMilliseconds
+        self.estimatorProcessingMilliseconds = estimatorProcessingMilliseconds
+        self.diskWritingMilliseconds = diskWritingMilliseconds
+        self.transitionToNextOutputMilliseconds = transitionToNextOutputMilliseconds
+        self.totalElapsedMilliseconds = totalElapsedMilliseconds
+        self.emissionCount = emissionCount
+    }
+
+    public var formattedSummary: String {
+        """
+        Calibration Timing Summary (\(emissionCount) emissions, total: \(String(format: "%.1f", totalElapsedMilliseconds)) ms):
+          pre-roll: \(String(format: "%.1f", preRollMilliseconds)) ms
+          probe A: \(String(format: "%.1f", probeAMilliseconds)) ms
+          A/B gap: \(String(format: "%.1f", abGapMilliseconds)) ms
+          probe B: \(String(format: "%.1f", probeBMilliseconds)) ms
+          acoustic tail: \(String(format: "%.1f", acousticTailMilliseconds)) ms
+          post-probe guard: \(String(format: "%.1f", postProbeGuardMilliseconds)) ms
+          estimator processing: \(String(format: "%.1f", estimatorProcessingMilliseconds)) ms
+          disk writing: \(String(format: "%.1f", diskWritingMilliseconds)) ms
+          transition to next: \(String(format: "%.1f", transitionToNextOutputMilliseconds)) ms
+        """
+    }
+}
+
+public final class CalibrationTimingCollector: @unchecked Sendable {
+    public var preRollMilliseconds: Double = 0
+    public var probeAMilliseconds: Double = 0
+    public var abGapMilliseconds: Double = 0
+    public var probeBMilliseconds: Double = 0
+    public var acousticTailMilliseconds: Double = 0
+    public var postProbeGuardMilliseconds: Double = 0
+    public var estimatorProcessingMilliseconds: Double = 0
+    public var diskWritingMilliseconds: Double = 0
+    public var transitionToNextOutputMilliseconds: Double = 0
+    public var emissionCount: Int = 0
+    public var startTime: ContinuousClock.Instant?
+    public var lastEmissionEndTime: ContinuousClock.Instant?
+
+    public init() {}
+
+    public func start() {
+        startTime = ContinuousClock.now
+    }
+
+    public func recordPreRoll(milliseconds: Double) {
+        preRollMilliseconds += milliseconds
+    }
+
+    public func recordEmission(
+        probeAMS: Double,
+        abGapMS: Double,
+        probeBMS: Double,
+        acousticTailMS: Double,
+        postProbeGuardMS: Double,
+        estimatorMS: Double,
+        diskWritingMS: Double
+    ) {
+        if let last = lastEmissionEndTime {
+            let now = ContinuousClock.now
+            let duration = now - last
+            let transitionMS = Double(duration.components.seconds) * 1000.0 + Double(duration.components.attoseconds) / 1_000_000_000_000_000.0
+            transitionToNextOutputMilliseconds += max(0, transitionMS)
+        }
+        probeAMilliseconds += probeAMS
+        abGapMilliseconds += abGapMS
+        probeBMilliseconds += probeBMS
+        acousticTailMilliseconds += acousticTailMS
+        postProbeGuardMilliseconds += postProbeGuardMS
+        estimatorProcessingMilliseconds += estimatorMS
+        diskWritingMilliseconds += diskWritingMS
+        emissionCount += 1
+        lastEmissionEndTime = ContinuousClock.now
+    }
+
+    public func finish() -> CalibrationTimingSummary {
+        let totalMS: Double
+        if let start = startTime {
+            let duration = ContinuousClock.now - start
+            totalMS = Double(duration.components.seconds) * 1000.0 + Double(duration.components.attoseconds) / 1_000_000_000_000_000.0
+        } else {
+            totalMS = preRollMilliseconds + probeAMilliseconds + abGapMilliseconds + probeBMilliseconds + acousticTailMilliseconds + postProbeGuardMilliseconds + estimatorProcessingMilliseconds + diskWritingMilliseconds + transitionToNextOutputMilliseconds
+        }
+        return CalibrationTimingSummary(
+            preRollMilliseconds: preRollMilliseconds,
+            probeAMilliseconds: probeAMilliseconds,
+            abGapMilliseconds: abGapMilliseconds,
+            probeBMilliseconds: probeBMilliseconds,
+            acousticTailMilliseconds: acousticTailMilliseconds,
+            postProbeGuardMilliseconds: postProbeGuardMilliseconds,
+            estimatorProcessingMilliseconds: estimatorProcessingMilliseconds,
+            diskWritingMilliseconds: diskWritingMilliseconds,
+            transitionToNextOutputMilliseconds: transitionToNextOutputMilliseconds,
+            totalElapsedMilliseconds: totalMS,
+            emissionCount: emissionCount
+        )
     }
 }

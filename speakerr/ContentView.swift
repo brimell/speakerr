@@ -310,47 +310,77 @@ struct ContentView: View {
     @ViewBuilder
     private var selectedSpeakersPillsView: some View {
         if !selectedOutputDevices.isEmpty {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
-                    ForEach(selectedOutputDevices.indices, id: \.self) { idx in
-                        let dev = selectedOutputDevices[idx]
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(selectedOutputDevices.count > 1 ? (idx == 0 ? Color.blue : Color.green) : Color.accentColor)
-                                .frame(width: 6, height: 6)
+            VStack(alignment: .leading, spacing: 6) {
+                if selectedOutputDevices.count == 1 {
+                    let dev = selectedOutputDevices[0]
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color.accentColor)
+                            .frame(width: 6, height: 6)
 
-                            Text(selectedOutputDevices.count > 1 ? outputLabel(for: idx, name: dev.name) : dev.name)
-                                .font(.caption.weight(.medium))
-                                .lineLimit(1)
+                        Text(dev.name)
+                            .font(.caption.weight(.medium))
+                            .lineLimit(1)
 
-                            Button {
-                                toggleOutputDevice(dev)
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.secondary)
-                                    .font(.system(size: 11))
-                            }
-                            .buttonStyle(.plain)
-                            .help("Remove \(dev.name)")
-                        }
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Color.secondary.opacity(0.12))
-                        .cornerRadius(12)
-                    }
-
-                    if selectedOutputDevices.count >= 2 {
                         Button {
-                            SpeakerrStore.model.presentCalibration()
-                            MainWindowCoordinator.shared.show()
+                            toggleOutputDevice(dev)
                         } label: {
-                            Label("Calibrate…", systemImage: "waveform.badge.mic")
-                                .font(.caption)
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                                .font(.system(size: 11))
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                        .help("Calibrate and align acoustic delay between speakers")
+                        .buttonStyle(.plain)
+                        .help("Remove \(dev.name)")
                     }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.secondary.opacity(0.12))
+                    .cornerRadius(12)
+                } else {
+                    let pillColumns = Array(repeating: GridItem(.flexible(), spacing: 6), count: min(selectedOutputDevices.count, 3))
+                    LazyVGrid(columns: pillColumns, alignment: .leading, spacing: 6) {
+                        ForEach(selectedOutputDevices.indices, id: \.self) { idx in
+                            let dev = selectedOutputDevices[idx]
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(idx == 0 ? Color.blue : (idx == 1 ? Color.green : Color.accentColor))
+                                    .frame(width: 6, height: 6)
+
+                                Text(outputLabel(for: idx, name: dev.name))
+                                    .font(.caption.weight(.medium))
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+
+                                Spacer(minLength: 0)
+
+                                Button {
+                                    toggleOutputDevice(dev)
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.secondary)
+                                        .font(.system(size: 11))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Remove \(dev.name)")
+                            }
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.secondary.opacity(0.12))
+                            .cornerRadius(12)
+                        }
+                    }
+
+                    Button {
+                        SpeakerrStore.model.presentCalibration()
+                        MainWindowCoordinator.shared.show()
+                    } label: {
+                        Label("Calibrate…", systemImage: "waveform.badge.mic")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .help("Calibrate and align acoustic delay between speakers")
                 }
 
                 ForEach(selectedOutputDevices.indices, id: \.self) { idx in
@@ -692,29 +722,85 @@ struct ContentView: View {
         return ""
     }
 
+    private struct EQTargetOption: Identifiable {
+        let id: String
+        let title: String
+        let index: Int
+    }
+
+    private var eqTargetOptions: [EQTargetOption] {
+        var options = [EQTargetOption(id: "master", title: "Master (All)", index: -1)]
+        for (index, device) in selectedOutputDevices.enumerated() {
+            options.append(EQTargetOption(id: device.uid, title: "\(outputName(for: index)): \(device.name)", index: index))
+        }
+        return options
+    }
+
+    private var eqTargetGridColumns: [GridItem] {
+        let count = min(eqTargetOptions.count, 3)
+        return Array(repeating: GridItem(.flexible(), spacing: 6), count: max(1, count))
+    }
+
+    private func targetCircleColor(for index: Int) -> Color {
+        if selectedOutputDevices.count > 1 {
+            return index == 0 ? Color.blue : (index == 1 ? Color.green : Color.accentColor)
+        }
+        return Color.accentColor
+    }
+
     private var eqSliders: some View {
         VStack(spacing: 6) {
             if selectedOutputDevices.count > 1 {
-                VStack(spacing: 4) {
+                VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
                         Text("EQ Target:")
                             .font(.caption.weight(.medium))
                             .foregroundColor(.secondary)
 
-                        Picker("", selection: selectedEQTargetBinding) {
-                            Text("Master (All)").tag("master")
-                            ForEach(Array(selectedOutputDevices.enumerated()), id: \.element.uid) { index, device in
-                                Text("\(outputName(for: index)): \(device.name)").tag(device.uid)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
+                        Text(eqTargetDescriptionText)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+
+                        Spacer()
                     }
 
-                    Text(eqTargetDescriptionText)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    LazyVGrid(columns: eqTargetGridColumns, spacing: 6) {
+                        ForEach(eqTargetOptions) { target in
+                            let isSelected = selectedEQTargetUID == target.id
+                            Button {
+                                switchEQTarget(to: target.id)
+                            } label: {
+                                HStack(spacing: 5) {
+                                    if target.id == "master" {
+                                        Image(systemName: "slider.horizontal.3")
+                                            .font(.system(size: 10, weight: .semibold))
+                                    } else {
+                                        Circle()
+                                            .fill(isSelected ? Color.white : targetCircleColor(for: target.index))
+                                            .frame(width: 6, height: 6)
+                                    }
+
+                                    Text(target.title)
+                                        .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 5)
+                                .padding(.horizontal, 8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(isSelected ? Color.accentColor : Color.secondary.opacity(0.12))
+                                )
+                                .foregroundColor(isSelected ? .white : .primary)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .help(target.title)
+                        }
+                    }
                 }
                 .padding(.bottom, 2)
             }

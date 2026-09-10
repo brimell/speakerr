@@ -281,18 +281,29 @@ func calibrationPhaseText(_ update: CalibrationProgressUpdate) -> String {
     }
 }
 
+func calibrationTimeRemainingText(_ update: CalibrationProgressUpdate) -> String? {
+    update.formattedTimeRemaining
+}
+
 @ViewBuilder
 func calibrationProgressView(_ update: CalibrationProgressUpdate?) -> some View {
-    if let update, let fraction = calibrationProgressFraction(update) {
-        HStack(spacing: 10) {
-            ProgressView(value: fraction)
-            Text(fraction, format: .percent.precision(.fractionLength(0)))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .frame(width: 42, alignment: .trailing)
+    VStack(alignment: .leading, spacing: 4) {
+        if let update, let fraction = calibrationProgressFraction(update) {
+            HStack(spacing: 10) {
+                ProgressView(value: fraction)
+                Text(fraction, format: .percent.precision(.fractionLength(0)))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .frame(width: 42, alignment: .trailing)
+            }
+        } else {
+            ProgressView()
         }
-    } else {
-        ProgressView()
+        if let update, let timeRemainingText = calibrationTimeRemainingText(update) {
+            Text(timeRemainingText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

@@ -96,4 +96,71 @@ final class SpeakerSessionStateTests: XCTestCase {
         XCTAssertEqual(try machine.handle(.prepared), .ready)
         XCTAssertEqual(try machine.handle(.invalidate(.sampleRateChanged)), .calibrationStale(.sampleRateChanged))
     }
+
+    func testCalibrationProgressUpdateFormattedTimeRemaining() {
+        let measuring = CalibrationProgressUpdate(phase: .measuring(speakerIndex: 0, speakerName: "Left", pass: 1, totalPasses: 3, measurement: 1, totalMeasurements: 3), progressFraction: 0.1, timeRemaining: nil)
+        XCTAssertNil(measuring.formattedTimeRemaining)
+
+        let completed = CalibrationProgressUpdate(phase: .completed, progressFraction: 1.0, timeRemaining: 0)
+        XCTAssertNil(completed.formattedTimeRemaining)
+
+        let negative = CalibrationProgressUpdate(phase: .verifying(pass: 2), progressFraction: 0.5, timeRemaining: -1)
+        XCTAssertNil(negative.formattedTimeRemaining)
+
+        let oneSecond = CalibrationProgressUpdate(phase: .measuring(speakerIndex: 0, speakerName: "Left", pass: 1, totalPasses: 3, measurement: 1, totalMeasurements: 3), progressFraction: 0.9, timeRemaining: 0.8)
+        XCTAssertEqual(oneSecond.formattedTimeRemaining, "About 1 second remaining")
+
+        let seconds = CalibrationProgressUpdate(phase: .measuring(speakerIndex: 0, speakerName: "Left", pass: 1, totalPasses: 3, measurement: 1, totalMeasurements: 3), progressFraction: 0.5, timeRemaining: 15.4)
+        XCTAssertEqual(seconds.formattedTimeRemaining, "About 15 seconds remaining")
+
+        let oneMinute = CalibrationProgressUpdate(phase: .measuring(speakerIndex: 0, speakerName: "Left", pass: 1, totalPasses: 3, measurement: 1, totalMeasurements: 3), progressFraction: 0.2, timeRemaining: 65)
+        XCTAssertEqual(oneMinute.formattedTimeRemaining, "About 1 minute remaining")
+
+        let twoMinutes = CalibrationProgressUpdate(phase: .measuring(speakerIndex: 0, speakerName: "Left", pass: 1, totalPasses: 3, measurement: 1, totalMeasurements: 3), progressFraction: 0.1, timeRemaining: 120)
+        XCTAssertEqual(twoMinutes.formattedTimeRemaining, "About 2 minutes remaining")
+    }
+
+    func testPersistentSpeakerSessionEstimateTimeRemaining() {
+        // When all measurements are already complete, time remaining should be 0.
+        let zeroRemaining = PersistentSpeakerSession.estimateTimeRemaining(
+            pass: 0,
+            totalPasses: 1,
+            outputsCount: 2,
+            measurementsPerSpeaker: 3,
+            acceptedCounts: [3, 3],
+            singleMeasurementDuration: 0.85,
+            elapsedSeconds: 10,
+            completedGlobalAttempts: 6
+        )
+        XCTAssertEqual(zeroRemaining, 0)
+
+        // At start (completedGlobalAttempts == 0), pace falls back to singleMeasurementDuration.
+        // 2 speakers * 3 measurements = 6 remaining measurements.
+        let initialRemaining = PersistentSpeakerSession.estimateTimeRemaining(
+            pass: 0,
+            totalPasses: 1,
+            outputsCount: 2,
+            measurementsPerSpeaker: 3,
+            acceptedCounts: [0, 0],
+            singleMeasurementDuration: 0.9,
+            elapsedSeconds: 0,
+            completedGlobalAttempts: 0
+        )
+        XCTAssertEqual(initialRemaining, 6.0 * 0.9, accuracy: 0.001)
+
+        // With multi-pass: current pass (pass 0 of 2) has 3 remaining (accepted: [2, 1]),
+        // plus next pass has 2 * 3 = 6 remaining. Total = 9 remaining measurements.
+        // Measured pace: 4 attempts in 4.0s = 1.0s/attempt.
+        let multiPassRemaining = PersistentSpeakerSession.estimateTimeRemaining(
+            pass: 0,
+            totalPasses: 2,
+            outputsCount: 2,
+            measurementsPerSpeaker: 3,
+            acceptedCounts: [2, 1],
+            singleMeasurementDuration: 0.9,
+            elapsedSeconds: 4.0,
+            completedGlobalAttempts: 4
+        )
+        XCTAssertEqual(multiPassRemaining, 9.0 * 1.0, accuracy: 0.001)
+    }
 }

@@ -32,10 +32,32 @@ public struct CalibrationProgressUpdate: Sendable, Equatable {
 
     public let phase: Phase
     public let progressFraction: Double?
+    public let timeRemaining: TimeInterval?
 
-    public init(phase: Phase, progressFraction: Double? = nil) {
+    public init(phase: Phase, progressFraction: Double? = nil, timeRemaining: TimeInterval? = nil) {
         self.phase = phase
         self.progressFraction = progressFraction
+        self.timeRemaining = timeRemaining
+    }
+}
+
+public extension CalibrationProgressUpdate {
+    var formattedTimeRemaining: String? {
+        guard phase != .completed else { return nil }
+        guard let seconds = timeRemaining, seconds >= 0 else { return nil }
+        let roundedSeconds = Int(seconds.rounded())
+        if roundedSeconds <= 1 {
+            return "About 1 second remaining"
+        } else if roundedSeconds < 60 {
+            return "About \(roundedSeconds) seconds remaining"
+        } else {
+            let minutes = Int((Double(roundedSeconds) / 60.0).rounded())
+            if minutes <= 1 {
+                return "About 1 minute remaining"
+            } else {
+                return "About \(minutes) minutes remaining"
+            }
+        }
     }
 }
 

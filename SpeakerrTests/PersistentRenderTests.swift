@@ -126,8 +126,8 @@ final class PersistentRenderTests: XCTestCase {
         fixture.state.setMode(.calibration)
         _ = fixture.state.requestEmission(speaker: 1)
         var channels: [[Float]] = []
-        // The chirp starts 512 frames after the first block's end.
-        for _ in 0..<10 { channels = fixture.render() }
+        // The chirp starts in the immediate next render cycle.
+        for _ in 0..<2 { channels = fixture.render() }
         XCTAssertEqual(channels[0], .init(repeating: 0, count: 64))
         XCTAssertEqual(channels[1], .init(repeating: 0, count: 64))
         XCTAssertEqual(channels[2][0], 0.25)
@@ -139,7 +139,7 @@ final class PersistentRenderTests: XCTestCase {
         fixture.state.setMode(.calibration)
         _ = fixture.state.requestEmission(speaker: 2)
         var channels: [[Float]] = []
-        for _ in 0..<10 { channels = fixture.render() }
+        for _ in 0..<2 { channels = fixture.render() }
 
         XCTAssertEqual(channels.count, 6)
         XCTAssertEqual(channels[0], .init(repeating: 0, count: 64))
@@ -156,7 +156,7 @@ final class PersistentRenderTests: XCTestCase {
             fixture.state.setMode(.calibration)
             _ = fixture.state.requestEmission(speaker: requestedSpeaker)
             var channels: [[Float]] = []
-            for _ in 0..<10 { channels = fixture.render() }
+            for _ in 0..<2 { channels = fixture.render() }
 
             for route in 0..<3 {
                 let expected: Float = route == requestedSpeaker ? 0.25 : 0

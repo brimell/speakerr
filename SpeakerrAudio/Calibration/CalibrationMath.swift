@@ -1,4 +1,5 @@
 import Foundation
+import CoreAudio
 
 public struct RobustMeasurementSummary: Sendable, Equatable, Codable {
     public let medianMilliseconds: Double
@@ -124,7 +125,15 @@ public struct SpeakerCalibrationEstimate: Sendable, Codable, Equatable {
             chosen = accepted
             let center = try! RobustMeasurementSummary(values: accepted.map(\.acousticLatencyMilliseconds)).medianMilliseconds
             supporting = candidates.filter { !$0.estimate.accepted && abs($0.acousticLatencyMilliseconds - center) <= clusterToleranceMilliseconds / 2 }
-            quality = accepted.count >= requiredAcceptedCount ? .high : .provisional
+            if accepted.count >= requiredAcceptedCount {
+                if accepted.count == 1 {
+                    quality = AdaptiveCalibrationController.isFastAcceptable(accepted[0], clusterToleranceMilliseconds: clusterToleranceMilliseconds) ? .high : .provisional
+                } else {
+                    quality = .high
+                }
+            } else {
+                quality = .provisional
+            }
             method = "acceptedMedian"
         } else {
             let sorted = candidates.sorted { $0.acousticLatencyMilliseconds < $1.acousticLatencyMilliseconds }
@@ -163,5 +172,183 @@ public struct SpeakerCalibrationEstimate: Sendable, Codable, Equatable {
         let consistency = estimate.abLatencyDifferenceMilliseconds.map { 1 / (1 + abs($0)) } ?? 0
         return 0.45 * estimate.confidence + 0.25 * min(1, max(0, estimate.peakProminence - 1) / 0.5)
             + 0.2 * min(1, abs(estimate.peakValue)) + 0.1 * consistency
+    }
+}
+
+public struct AdaptiveCalibrationController: Sendable {
+    public static let strongConsistencyToleranceMilliseconds: Double = 0.25
+    public static let defaultClusterToleranceMilliseconds: Double = 3.0
+    public static let defaultTargetResidualMilliseconds: Double = 2.0
+
+    public static func isFastAcceptable(
+        _ measurement: AcousticMeasurement,
+        priorMeasurements: [AcousticMeasurement] = [],
+        strongConsistencyToleranceMilliseconds: Double = strongConsistencyToleranceMilliseconds,
+        clusterToleranceMilliseconds: Double = defaultClusterToleranceMilliseconds
+    ) -> Bool {
+        guard measurement.estimate.accepted else { return false }
+        guard let abDiff = measurement.estimate.abLatencyDifferenceMilliseconds,
+              abs(abDiff) <= strongConsistencyToleranceMilliseconds else {
+            return false
+        }
+        for prior in priorMeasurements where prior.estimate.accepted {
+            if abs(measurement.acousticLatencyMilliseconds - prior.acousticLatencyMilliseconds) > clusterToleranceMilliseconds {
+                return false
+            }
+        }
+        return true
+    }
+
+    public enum TemporalStability: Sendable, Equatable {
+        case singleMeasurement(isFastAccepted: Bool)
+        case stableCluster(spread: Double)
+        case monotonicDrift(slopeMillisecondsPerSecond: Double)
+        case inconsistent(spread: Double)
+        case insufficientData
+    }
+
+    public static func assessTemporalStability(
+        measurements: [AcousticMeasurement],
+        driftThresholdMillisecondsPerSecond: Double = 0.25
+    ) -> TemporalStability {
+        guard !measurements.isEmpty else { return .insufficientData }
+        if measurements.count == 1 {
+            return .singleMeasurement(isFastAccepted: isFastAcceptable(measurements[0]))
+        }
+        let sorted = measurements.sorted { $0.emission.scheduledOutputHostTime < $1.emission.scheduledOutputHostTime }
+        guard sorted.count >= 2 else { return .insufficientData }
+        let lats = sorted.map(\.acousticLatencyMilliseconds)
+        let firstHost = sorted.first!.emission.scheduledOutputHostTime
+        let lastHost = sorted.last!.emission.scheduledOutputHostTime
+        let dtNanos = Int64(AudioConvertHostTimeToNanos(lastHost)) - Int64(AudioConvertHostTimeToNanos(firstHost))
+        let dtSeconds = Double(max(1, dtNanos)) / 1_000_000_000.0
+
+        let totalLatDelta = lats.last! - lats.first!
+        let slope = totalLatDelta / dtSeconds
+
+        var isMonotonicIncreasing = true
+        var isMonotonicDecreasing = true
+        for i in 0..<(lats.count - 1) {
+            let step = lats[i + 1] - lats[i]
+            if step < 0.1 { isMonotonicIncreasing = false }
+            if step > -0.1 { isMonotonicDecreasing = false }
+        }
+
+        let spread = (lats.max() ?? 0) - (lats.min() ?? 0)
+        if (isMonotonicIncreasing || isMonotonicDecreasing) && abs(slope) >= driftThresholdMillisecondsPerSecond && spread > 0.5 {
+            return .monotonicDrift(slopeMillisecondsPerSecond: slope)
+        }
+        if spread <= defaultClusterToleranceMilliseconds {
+            return .stableCluster(spread: spread)
+        }
+        return .inconsistent(spread: spread)
+    }
+
+    public static func shouldTakeExtraBaselineMeasurement(
+        speakerIndex: Int,
+        measurements: [AcousticMeasurement],
+        maximumNormalMeasurements: Int = 3
+    ) -> Bool {
+        if measurements.isEmpty { return true }
+        if measurements.count >= maximumNormalMeasurements { return false }
+        if measurements.count == 1 {
+            return !isFastAcceptable(measurements[0])
+        }
+        if measurements.count == 2 {
+            let m0 = measurements[0]
+            let m1 = measurements[1]
+            if !m0.estimate.accepted && !m1.estimate.accepted { return true }
+            if m0.estimate.accepted && !m1.estimate.accepted {
+                return !isFastAcceptable(m0)
+            }
+            if !m0.estimate.accepted && m1.estimate.accepted {
+                return !isFastAcceptable(m1)
+            }
+            let diff = abs(m0.acousticLatencyMilliseconds - m1.acousticLatencyMilliseconds)
+            if diff > 1.5 { return true }
+            let stability = assessTemporalStability(measurements: measurements)
+            if case .monotonicDrift = stability { return true }
+            return false
+        }
+        return false
+    }
+
+    public static func identifyOffendingSpeakers(
+        verificationMeasurements: [[AcousticMeasurement]],
+        targetSpreadMilliseconds: Double = defaultTargetResidualMilliseconds
+    ) -> [Int] {
+        var offending: [Int] = []
+        let latest = verificationMeasurements.enumerated().compactMap { index, list -> (index: Int, measurement: AcousticMeasurement)? in
+            guard let last = list.last else { return nil }
+            return (index: index, measurement: last)
+        }
+        guard latest.count == verificationMeasurements.count else {
+            return verificationMeasurements.indices.filter { verificationMeasurements[$0].isEmpty }
+        }
+
+        for item in latest {
+            if !item.measurement.estimate.accepted || !isFastAcceptable(item.measurement) {
+                offending.append(item.index)
+            }
+        }
+
+        let accepted = latest.filter { $0.measurement.estimate.accepted }
+        guard !accepted.isEmpty else {
+            return Array(verificationMeasurements.indices)
+        }
+        let lats = accepted.map(\.measurement.acousticLatencyMilliseconds)
+        let minLat = lats.min()!
+        let maxLat = lats.max()!
+        if maxLat - minLat <= targetSpreadMilliseconds && offending.isEmpty {
+            return []
+        }
+
+        let medianLat = (try? RobustMeasurementSummary(values: lats).medianMilliseconds) ?? (minLat + maxLat) / 2
+        for item in accepted {
+            if abs(item.measurement.acousticLatencyMilliseconds - medianLat) > targetSpreadMilliseconds / 2 {
+                if !offending.contains(item.index) {
+                    offending.append(item.index)
+                }
+            }
+        }
+        if offending.isEmpty && (maxLat - minLat > targetSpreadMilliseconds) {
+            if let worst = accepted.max(by: { abs($0.measurement.acousticLatencyMilliseconds - medianLat) < abs($1.measurement.acousticLatencyMilliseconds - medianLat) }) {
+                offending.append(worst.index)
+            }
+        }
+        return offending.sorted()
+    }
+
+    public static func calculateBaselineCompensation(
+        speakerMeasurements: [[AcousticMeasurement]],
+        requiredAcceptedCount: Int = 1,
+        clusterToleranceMilliseconds: Double = defaultClusterToleranceMilliseconds
+    ) throws -> DelayCompensation {
+        let estimates = speakerMeasurements.map {
+            SpeakerCalibrationEstimate(
+                measurements: $0,
+                requiredAcceptedCount: requiredAcceptedCount,
+                clusterToleranceMilliseconds: clusterToleranceMilliseconds
+            )
+        }
+        guard estimates.allSatisfy(\.canApply) else {
+            throw CalibrationSessionError.didNotConverge(residualMilliseconds: .infinity)
+        }
+        let arrivals = estimates.compactMap(\.delayMilliseconds)
+        guard arrivals.count == speakerMeasurements.count else {
+            throw CalibrationSessionError.didNotConverge(residualMilliseconds: .infinity)
+        }
+        return try DelayCompensation.calculate(arrivalMilliseconds: arrivals)
+    }
+
+    public static func calculateVerificationSpread(
+        verificationMeasurements: [[AcousticMeasurement]]
+    ) -> Double? {
+        let latest = verificationMeasurements.compactMap { $0.last }
+        guard latest.count == verificationMeasurements.count else { return nil }
+        guard latest.allSatisfy({ $0.estimate.accepted }) else { return nil }
+        let lats = latest.map(\.acousticLatencyMilliseconds)
+        guard let minLat = lats.min(), let maxLat = lats.max() else { return nil }
+        return maxLat - minLat
     }
 }

@@ -22,7 +22,7 @@ private actor PreviewSessionController: SpeakerSessionControlling {
 }
 
 @MainActor
-private func previewModel(state: SpeakerSessionState?, snapshot: CalibrationSnapshot? = nil, availableBoth: Bool = true, initialOutcome: CalibrationOutcome = .none, permissionDenied: Bool = false) -> SpeakerrViewModel {
+private func previewModel(state: SpeakerSessionState?, snapshot: CalibrationSnapshot? = nil, availableBoth: Bool = true, initialOutcome: CalibrationOutcome = .none, initialCalibrationProgress: CalibrationProgressUpdate? = nil, permissionDenied: Bool = false) -> SpeakerrViewModel {
     let bose = OutputDevice(id: "bose", coreAudioID: 10, name: "Bose SoundLink Max", transport: .bluetooth, sampleRate: 44_100, channelCount: 2)
     let middleton = OutputDevice(id: "middleton", coreAudioID: 11, name: "MIDDLETON", transport: .bluetooth, sampleRate: 44_100, channelCount: 2)
     let mic = InputDevice(id: "mic", coreAudioID: 12, name: "MacBook Pro Microphone", transport: .builtIn, sampleRate: 44_100, channelCount: 1)
@@ -33,7 +33,8 @@ private func previewModel(state: SpeakerSessionState?, snapshot: CalibrationSnap
     let preferences = SpeakerrPreferences(defaults: defaults)
     preferences.selectedSpeakerUIDs = [bose.id, middleton.id]
     preferences.preferredMicrophoneUID = mic.id
-    return SpeakerrViewModel(controller: controller, preferences: preferences, initialCalibrationOutcome: initialOutcome, microphonePermissionDenied: permissionDenied)
+    let progress = initialCalibrationProgress ?? (state == .calibrating ? CalibrationProgressUpdate(phase: .measuring(speakerIndex: 0, speakerName: bose.name, pass: 1, totalPasses: 3, measurement: 2, totalMeasurements: 3), progressFraction: 0.35, timeRemaining: 12) : nil)
+    return SpeakerrViewModel(controller: controller, preferences: preferences, initialCalibrationOutcome: initialOutcome, initialCalibrationProgress: progress, microphonePermissionDenied: permissionDenied)
 }
 
 #Preview("No speakers selected") {
@@ -47,6 +48,10 @@ private func previewModel(state: SpeakerSessionState?, snapshot: CalibrationSnap
 
 #Preview("Calibrating") {
     MainWindowView(model: previewModel(state: .calibrating))
+}
+
+#Preview("Calibrating sheet") {
+    CalibrationSheet(model: previewModel(state: .calibrating))
 }
 
 #Preview("Aligned") {
