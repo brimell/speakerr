@@ -6,6 +6,8 @@ Status: implemented and hardware-tested on 4 September 2026.
 
 `speakerr-test calibrate` now:
 
+> **Listening position:** Calibration assumes the laptop and microphone are at your intended listening position. The resulting speaker sync is optimized for that position.
+
 1. creates the existing private, non-stacked two-output aggregate;
 2. uses output A as its clock source and verifies drift compensation for output B;
 3. starts raw AUHAL microphone capture once;
