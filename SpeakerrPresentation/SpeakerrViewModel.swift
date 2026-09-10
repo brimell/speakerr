@@ -82,6 +82,8 @@ public final class SpeakerrViewModel {
     public private(set) var calibrationProgress: CalibrationProgressUpdate?
     public private(set) var calibrationSpeakerResults: [CalibrationSpeakerResult] = []
     public private(set) var calibrationOutcome: CalibrationOutcome = .none
+        public private(set) var calibrationAttempts: [CalibrationAttemptDiagnostic] = []
+        public private(set) var calibrationCompletion: CalibrationCompletionDiagnostics?
     public private(set) var isBusy = false
     public private(set) var microphonePermissionDenied = false
     public var isSpeakerSelectionPresented = false
@@ -239,6 +241,8 @@ public final class SpeakerrViewModel {
         let runID = calibrationRunID
         calibrationOutcome = .none
         calibrationProgress = nil
+        calibrationAttempts = []
+        calibrationCompletion = nil
         calibrationSpeakerResults = []
         latestRecheckResidual = nil
         latestRecheckResiduals = []
@@ -270,6 +274,22 @@ public final class SpeakerrViewModel {
                         let confidence = measurements.map(\.estimate.confidence).reduce(0, +) / Double(max(1, measurements.count))
                         return CalibrationSpeakerResult(id: speaker?.id ?? "speaker-\(index + 1)", speakerName: speaker?.name ?? "Speaker \(index + 1)", detectedLatencyMilliseconds: summary.medianMilliseconds, confidence: confidence)
                     }
+                }
+                calibrationAttempts = passes.flatMap(\.attempts)
+                let finalPass = passes.last
+                let snapshot = try? await controller.snapshot()
+                if let finalPass {
+                    let arrivals = finalPass.summariesBySpeaker.map(\.medianMilliseconds)
+                    let appliedDelays = arrivals.indices.map { index in
+                        snapshot?.status?.delays.indices.contains(index) == true ? snapshot?.status?.delays[index].calibration ?? 0 : 0
+                    }
+                    let correctedArrivals = arrivals.indices.map { arrivals[$0] + appliedDelays[$0] }
+                    let center = correctedArrivals.reduce(0, +) / Double(max(1, correctedArrivals.count))
+                    let rows = correctedArrivals.indices.map { index in
+                        CalibrationCompletionDiagnostic(speakerIndex: index, speakerName: snapshot?.selectedOutputs.indices.contains(index) == true ? snapshot?.selectedOutputs[index].name ?? "Speaker \(index + 1)" : "Speaker \(index + 1)", arrivalMilliseconds: arrivals[index], appliedDelayMilliseconds: appliedDelays[index], residualMilliseconds: correctedArrivals[index] - center)
+                    }
+                    let spread = (correctedArrivals.max() ?? 0) - (correctedArrivals.min() ?? 0)
+                    calibrationCompletion = CalibrationCompletionDiagnostics(speakers: rows, residualSpreadMilliseconds: spread)
                 }
                 let residuals = passes.last?.relativeArrivalsToReferenceMilliseconds ?? []
                 let residual = (residuals.max() ?? 0) - (residuals.min() ?? 0)

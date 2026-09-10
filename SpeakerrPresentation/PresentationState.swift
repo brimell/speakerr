@@ -44,6 +44,33 @@ public enum CalibrationOutcome: Sendable, Equatable {
     case cancelled
 }
 
+public struct CalibrationCompletionDiagnostic: Sendable, Equatable, Identifiable {
+    public var id: Int { speakerIndex }
+    public let speakerIndex: Int
+    public let speakerName: String
+    public let arrivalMilliseconds: Double
+    public let appliedDelayMilliseconds: Double
+    public let residualMilliseconds: Double
+
+    public init(speakerIndex: Int, speakerName: String, arrivalMilliseconds: Double, appliedDelayMilliseconds: Double, residualMilliseconds: Double) {
+        self.speakerIndex = speakerIndex
+        self.speakerName = speakerName
+        self.arrivalMilliseconds = arrivalMilliseconds
+        self.appliedDelayMilliseconds = appliedDelayMilliseconds
+        self.residualMilliseconds = residualMilliseconds
+    }
+}
+
+public struct CalibrationCompletionDiagnostics: Sendable, Equatable {
+    public let speakers: [CalibrationCompletionDiagnostic]
+    public let residualSpreadMilliseconds: Double
+
+    public init(speakers: [CalibrationCompletionDiagnostic], residualSpreadMilliseconds: Double) {
+        self.speakers = speakers
+        self.residualSpreadMilliseconds = residualSpreadMilliseconds
+    }
+}
+
 public struct CalibrationSpeakerResult: Sendable, Equatable, Identifiable {
     public let id: String
     public let speakerName: String
