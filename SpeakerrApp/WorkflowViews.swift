@@ -237,7 +237,7 @@ struct CalibrationSheet: View {
     }
 
     private func metric(_ value: Double?, suffix: String = "") -> some View {
-        Text(value.map { "\($0, specifier: \"%.3f\")\(suffix)" } ?? "-")
+        Text(value.map { "\($0, specifier: "%.3f")\(suffix)" } ?? "-")
             .monospacedDigit()
     }
 
