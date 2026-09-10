@@ -220,8 +220,10 @@ public final class SpeakerrViewModel {
     }
 
     public func calibrate() {
+        print("[CalibrationTrace] SpeakerrViewModel.calibrate model=\(ObjectIdentifier(self)) availableInputs=\(availableInputs.count) preferredInput=\(preferences.preferredMicrophoneUID ?? "nil")")
         guard let inputUID = resolvedCalibrationInputUID else {
             presentation.statusDetail = "Choose a microphone before calibrating."
+            print("[CalibrationTrace] SpeakerrViewModel.calibrate no input; writing isCalibrationPresented=true")
             isCalibrationPresented = true
             return
         }

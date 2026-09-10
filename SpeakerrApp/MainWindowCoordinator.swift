@@ -12,6 +12,7 @@ public final class MainWindowCoordinator: NSObject, NSWindowDelegate {
     }
 
     public func show(model: SpeakerrViewModel) {
+        print("[CalibrationTrace] MainWindowCoordinator.show model=\(ObjectIdentifier(model))")
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApplication.shared.activate(ignoringOtherApps: true)
@@ -64,6 +65,7 @@ public struct SpeakerrAlignmentMenuView: View {
         Divider()
         Button("Open Speakerr") { MainWindowCoordinator.shared.show(model: model) }
         Button("Calibrate…") {
+            print("[CalibrationTrace] SpeakerrAlignmentMenuView Calibrate button action")
             model.isCalibrationPresented = true
             MainWindowCoordinator.shared.show(model: model)
         }

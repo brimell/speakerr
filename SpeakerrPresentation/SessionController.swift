@@ -128,6 +128,7 @@ public actor CoreAudioSpeakerSessionController: SpeakerSessionControlling {
     }
 
     public func calibrate(inputUID: String, configuration: CalibrationExperimentConfiguration, progress: @escaping @Sendable (CalibrationProgressUpdate) -> Void) async throws -> [CalibrationPassMeasurements] {
+        print("[CalibrationTrace] CoreAudioSpeakerSessionController.calibrate inputUID=\(inputUID)")
         guard let session else { throw SessionControllerError.sessionNotRunning }
         let input = try resolveInput(uid: inputUID)
         return try await session.performCalibration(input: input, configuration: configuration, progress: progress)

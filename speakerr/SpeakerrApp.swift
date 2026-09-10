@@ -101,6 +101,7 @@ struct SpeakerrApp: App {
     private let trayController: TrayController
 
     init() {
+        print("[CalibrationTrace] startup commit=9707152 bundle=\(Bundle.main.bundlePath)")
         let engine = AudioEngine()
         let model = EQModel()
         let checker = UpdateChecker()

@@ -193,6 +193,7 @@ final class TrayController: NSObject {
     }
 
     @MainActor @objc private func openSpeakerAlignmentAction() {
+        print("[CalibrationTrace] TrayController context-menu calibration action")
         MainWindowCoordinator.shared.show()
     }
 
