@@ -85,14 +85,13 @@ struct CalibrationSheet: View {
                 .foregroundStyle(.secondary)
         } else if model.isBusy || model.presentation.status == .calibrating {
             Text("Calibrating Speakers").font(.title2.weight(.semibold))
-            Text(model.calibrationProgress.map(calibrationPhaseText) ?? "Preparing calibration…")
-                .foregroundStyle(.secondary)
+            calibrationProgressDetails(model.calibrationProgress, speakerCount: model.preferences.selectedSpeakerUIDs.count)
             calibrationProgressView(model.calibrationProgress)
             Text("Keep the Mac near your listening position.")
                 .foregroundStyle(.secondary)
         } else {
             switch model.calibrationOutcome {
-            case .success(let residual): success(residual)
+            case .success(let residual): success(residual, results: model.calibrationSpeakerResults)
             case .nonConverged(let residual, let canKeep): nonConvergence(residual, canKeep: canKeep)
             case .lowConfidence(let message): lowConfidence(message)
             case .cancelled:
@@ -122,10 +121,19 @@ struct CalibrationSheet: View {
         }
     }
 
-    private func success(_ residual: Double) -> some View {
+    private func success(_ residual: Double, results: [CalibrationSpeakerResult]) -> some View {
         Group {
             Label("Speakers Aligned", systemImage: "checkmark.circle.fill")
                 .font(.title2.weight(.semibold)).foregroundStyle(.green)
+            ForEach(results) { result in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(result.speakerName).font(.headline)
+                    HStack {
+                        LabeledContent("Detected") { Text("\(result.detectedLatencyMilliseconds, format: .number.precision(.fractionLength(1))) ms").monospacedDigit() }
+                        LabeledContent("Confidence") { Text(calibrationConfidenceLabel(result.confidence)) }
+                    }
+                }
+            }
             Text("Residual error").foregroundStyle(.secondary)
             Text("\(residual, format: .number.precision(.fractionLength(2))) ms")
                 .font(.system(size: 30, weight: .semibold, design: .rounded)).monospacedDigit()
@@ -145,10 +153,24 @@ struct CalibrationSheet: View {
 
     private func lowConfidence(_ message: String) -> some View {
         Group {
-            Text("Could Not Measure Reliably").font(.title2.weight(.semibold))
+            Label("Measurement failed", systemImage: "arrow.clockwise.circle")
+                .font(.title2.weight(.semibold))
+            Text("Retry required before the speakers can be aligned.")
+                .foregroundStyle(.orange)
             Text(message).foregroundStyle(.secondary)
             Text("Try moving the Mac closer, reducing background noise, or increasing calibration volume slightly.")
                 .foregroundStyle(.secondary)
+            diagnosticsDisclosure(fallback: message)
+        }
+    }
+
+    private func diagnosticsDisclosure(fallback: String) -> some View {
+        DisclosureGroup("Technical diagnostics") {
+            Text(model.presentation.technicalError ?? fallback)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -186,5 +208,38 @@ struct CalibrationSheet: View {
                 }
             }
         }
+    }
+}
+
+@ViewBuilder
+private func calibrationProgressDetails(_ update: CalibrationProgressUpdate?, speakerCount: Int) -> some View {
+    if let update {
+        switch update.phase {
+        case .measuring(let speakerIndex, let speakerName, let pass, let totalPasses, let measurement, let totalMeasurements):
+            VStack(alignment: .leading, spacing: 4) {
+                Text(speakerName).font(.headline)
+                Text("Speaker \(speakerIndex + 1) of \(max(1, speakerCount))")
+                    .foregroundStyle(.secondary)
+                Text("Measurement \(measurement) of \(totalMeasurements) · Pass \(pass) of \(totalPasses)")
+                    .foregroundStyle(.secondary)
+            }
+        case .applyingCorrection(let residual):
+            Text("Applying correction · residual \(residual, format: .number.precision(.fractionLength(1))) ms")
+                .foregroundStyle(.secondary)
+        case .verifying(let pass):
+            Text("Verifying alignment · pass \(pass)").foregroundStyle(.secondary)
+        case .completed:
+            Text("Calibration complete").foregroundStyle(.secondary)
+        }
+    } else {
+        Text("Preparing calibration…").foregroundStyle(.secondary)
+    }
+}
+
+private func calibrationConfidenceLabel(_ confidence: Double) -> String {
+    switch confidence {
+    case 0.8...: "High"
+    case 0.6..<0.8: "Medium"
+    default: "Low"
     }
 }

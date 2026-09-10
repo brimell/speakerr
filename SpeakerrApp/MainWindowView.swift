@@ -283,7 +283,13 @@ func calibrationPhaseText(_ update: CalibrationProgressUpdate) -> String {
 @ViewBuilder
 func calibrationProgressView(_ update: CalibrationProgressUpdate?) -> some View {
     if let update, let fraction = calibrationProgressFraction(update) {
-        ProgressView(value: fraction)
+        HStack(spacing: 10) {
+            ProgressView(value: fraction)
+            Text(fraction, format: .percent.precision(.fractionLength(0)))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(width: 42, alignment: .trailing)
+        }
     } else {
         ProgressView()
     }

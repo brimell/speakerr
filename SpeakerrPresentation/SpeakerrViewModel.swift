@@ -80,6 +80,7 @@ public final class SpeakerrViewModel {
     public private(set) var availableOutputs: [OutputDevice] = []
     public private(set) var availableInputs: [InputDevice] = []
     public private(set) var calibrationProgress: CalibrationProgressUpdate?
+    public private(set) var calibrationSpeakerResults: [CalibrationSpeakerResult] = []
     public private(set) var calibrationOutcome: CalibrationOutcome = .none
     public private(set) var isBusy = false
     public private(set) var microphonePermissionDenied = false
@@ -238,6 +239,7 @@ public final class SpeakerrViewModel {
         let runID = calibrationRunID
         calibrationOutcome = .none
         calibrationProgress = nil
+        calibrationSpeakerResults = []
         latestRecheckResidual = nil
         latestRecheckResiduals = []
         isBusy = true
@@ -260,6 +262,15 @@ public final class SpeakerrViewModel {
                     }
                 }
                 guard calibrationRunID == runID else { return }
+                if let pass = passes.last {
+                    calibrationSpeakerResults = pass.summariesBySpeaker.enumerated().map { index, summary in
+                        let speakerUID = preferences.selectedSpeakerUIDs.indices.contains(index) ? preferences.selectedSpeakerUIDs[index] : nil
+                        let speaker = availableOutputs.first(where: { $0.id == speakerUID })
+                        let measurements = pass.measurementsBySpeaker[index]
+                        let confidence = measurements.map(\.estimate.confidence).reduce(0, +) / Double(max(1, measurements.count))
+                        return CalibrationSpeakerResult(id: speaker?.id ?? "speaker-\(index + 1)", speakerName: speaker?.name ?? "Speaker \(index + 1)", detectedLatencyMilliseconds: summary.medianMilliseconds, confidence: confidence)
+                    }
+                }
                 let residuals = passes.last?.relativeArrivalsToReferenceMilliseconds ?? []
                 let residual = (residuals.max() ?? 0) - (residuals.min() ?? 0)
                 calibrationOutcome = .success(residualMilliseconds: residual)

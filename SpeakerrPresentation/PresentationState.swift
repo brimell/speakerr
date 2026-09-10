@@ -44,6 +44,20 @@ public enum CalibrationOutcome: Sendable, Equatable {
     case cancelled
 }
 
+public struct CalibrationSpeakerResult: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let speakerName: String
+    public let detectedLatencyMilliseconds: Double
+    public let confidence: Double
+
+    public init(id: String, speakerName: String, detectedLatencyMilliseconds: Double, confidence: Double) {
+        self.id = id
+        self.speakerName = speakerName
+        self.detectedLatencyMilliseconds = detectedLatencyMilliseconds
+        self.confidence = confidence
+    }
+}
+
 public enum CalibrationPresentation: Sendable, Equatable {
     case unavailable
     case required(reason: String)
