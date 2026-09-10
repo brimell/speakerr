@@ -319,7 +319,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         do {
             let aggregate = try aggregateManager.create(outputs: outputs)
             sampleRate = aggregate.sampleRate
-            let chirp = try LogarithmicChirpGenerator(level: calibrationLevel).generate(sampleRate: sampleRate)
+            let chirp = try GolayComplementaryPairGenerator(level: calibrationLevel).generate(sampleRate: sampleRate)
             let state = try PersistentRenderState(sampleRate: sampleRate, chirp: chirp.samples, transport: transport, channelCounts: aggregate.channelCounts, delays: delayComponents.map(\.effectiveMilliseconds), routingMode: routingMode)
             if let master = pendingMasterBands { state.setMasterEQBands(master) }
             state.setMasterEQBypass(pendingMasterBypass)
@@ -384,7 +384,10 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         do {
             for pass in 0..<configuration.maximumPasses {
                 try Task.checkCancellation()
-                if pass > 0 { progress?(.init(phase: .verifying(pass: pass + 1))) }
+                if pass > 0 {
+                    let fraction = Double(pass) / Double(configuration.maximumPasses)
+                    progress?(.init(phase: .verifying(pass: pass + 1), progressFraction: fraction))
+                }
                 let measured = try await measurePass(pass: pass, configuration: configuration, microphone: microphone, reference: reference, progress: progress)
                 passes.append(measured)
                 let residualsForSpeakers = measured.relativeArrivalsToReferenceMilliseconds
@@ -399,7 +402,8 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                     return passes
                 }
                 guard convergence.shouldContinue(residuals: residuals) else { break }
-                progress?(.init(phase: .applyingCorrection(residualMilliseconds: residual)))
+                let fraction = Double(pass + 1) / Double(configuration.maximumPasses)
+                progress?(.init(phase: .applyingCorrection(residualMilliseconds: residual), progressFraction: fraction))
                 try applyResiduals(measured.relativeArrivalsToReferenceMilliseconds)
             }
             let residual = residuals.last ?? .infinity
@@ -526,7 +530,12 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         let recording = Array(captured.samples[sliceStart..<sliceEnd])
         let lower = max(0, Int(floor(scheduledInput)) - sliceStart - preSearch)
         let upper = min(recording.count - reference.samples.count + 1, searchEnd - sliceStart)
-        let estimate = try estimator.estimateDelay(reference: reference.samples, recording: recording, sampleRate: sampleRate, searchRange: lower..<upper)
+        let estimate: DelayEstimate
+        if let (a, b) = reference.complementarySequences {
+            estimate = try estimator.estimateDelay(referenceA: a, referenceB: b, recording: recording, sampleRate: sampleRate, interSequenceSilenceSamples: reference.interSequenceSilenceSamples, searchRange: lower..<upper)
+        } else {
+            estimate = try estimator.estimateDelay(reference: reference.samples, recording: recording, sampleRate: sampleRate, searchRange: lower..<upper)
+        }
         let arrivalHost = try captured.hostTime(atSampleIndex: Double(sliceStart) + estimate.sampleOffset)
         let latency = Double(Int64(AudioConvertHostTimeToNanos(arrivalHost)) - Int64(AudioConvertHostTimeToNanos(host))) / 1_000_000
         emissionSequence += 1
