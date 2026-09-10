@@ -17,7 +17,7 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
     public init(
         preRollSeconds: Double = 0.8,
         chirpDurationSeconds: Double = 0.3,
-        intervalSeconds: Double = 1.35,
+        intervalSeconds: Double = 1.2,
         passGapSeconds: Double = 2.0,
         postRollSeconds: Double = 0.9,
         measurementsPerSpeaker: Int = 3,
