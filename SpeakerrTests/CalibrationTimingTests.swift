@@ -21,7 +21,7 @@ final class CalibrationTimingTests: XCTestCase {
         let configuration = CalibrationExperimentConfiguration()
         try configuration.validate()
         XCTAssertEqual(configuration.eventsPerPass, 10)
-        XCTAssertEqual(configuration.passStartSeconds(0), 0.8, accuracy: 0.0001)
+        XCTAssertEqual(configuration.passStartSeconds(0), 0.2, accuracy: 0.0001)
         XCTAssertGreaterThan(configuration.passStartSeconds(1), configuration.passStartSeconds(0) + Double(configuration.eventsPerPass - 1) * configuration.intervalSeconds + configuration.chirpDurationSeconds)
     }
 

@@ -15,11 +15,11 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
     public var stabilityMeasurementOffsetsSeconds: [Double]
 
     public init(
-        preRollSeconds: Double = 0.8,
+        preRollSeconds: Double = 0.2,
         chirpDurationSeconds: Double = 0.3,
-        intervalSeconds: Double = 1.2,
-        passGapSeconds: Double = 2.0,
-        postRollSeconds: Double = 0.9,
+        intervalSeconds: Double = 1.11,
+        passGapSeconds: Double = 0,
+        postRollSeconds: Double = 0.8,
         measurementsPerSpeaker: Int = 3,
         maximumPasses: Int = 3,
         maximumRetriesPerSpeaker: Int = 2,
