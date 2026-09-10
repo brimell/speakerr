@@ -48,3 +48,85 @@ final class CalibrationMathTests: XCTestCase {
         XCTAssertFalse(controller.isSuccessful(residuals: [5, -3, 2.1]))
     }
 }
+
+extension CalibrationMathTests {
+    private func candidate(_ latency: Double, accepted: Bool = false, confidence: Double = 0.32, abDifference: Double = 0) -> AcousticMeasurement {
+        AcousticMeasurement(emission: CalibrationEmission(pass: 0, sequence: 0, speakerIndex: 0, scheduledOutputFrame: 0, scheduledOutputHostTime: 1), arrivalHostTime: 2, acousticLatencyMilliseconds: latency,
+            estimate: DelayEstimate(sampleOffset: latency, sampleRate: 1_000, confidence: confidence, peakValue: 0.22, secondBestPeak: 0.05, peakProminence: 4.4, accepted: accepted, abLatencyDifferenceMilliseconds: abDifference))
+    }
+
+    func testReliableThreeSpeakerCalibrationRetainsAcceptedMedians() throws {
+        let pass = try CalibrationPassMeasurements(pass: 0, measurementsBySpeaker: [
+            [318.3, 318.4, 318.5].map { candidate($0, accepted: true) },
+            [455.5, 455.6, 455.7].map { candidate($0, accepted: true) },
+            [302.1, 302.2, 302.3].map { candidate($0, accepted: true) }
+        ], failures: [])
+        XCTAssertEqual(pass.quality, .high)
+        XCTAssertTrue(pass.canApplyCompensation)
+        let compensation = try DelayCompensation.calculate(arrivalMilliseconds: pass.speakerEstimates.compactMap(\.delayMilliseconds))
+        for (actual, expected) in zip(compensation.delays, [137.2, 0, 153.4]) { XCTAssertEqual(actual, expected, accuracy: 0.001) }
+    }
+
+    func testClusteredRejectedSpeakerProducesProvisionalNSpeakerCompensation() throws {
+        let pass = try CalibrationPassMeasurements(pass: 0, measurementsBySpeaker: [
+            [318.3, 318.4, 318.5].map { candidate($0, accepted: true) },
+            [455.5, 455.6, 455.7].map { candidate($0, accepted: true) },
+            [301.8, 302.1, 302.4, 303.0, 94.0].map { candidate($0) }
+        ], failures: [])
+        let fallback = pass.speakerEstimates[2]
+        XCTAssertEqual(fallback.delayMilliseconds!, 302.25, accuracy: 0.001)
+        XCTAssertEqual(fallback.clusterMembers.count, 4)
+        XCTAssertEqual(fallback.excludedOutliers, [94])
+        XCTAssertEqual(fallback.summary!.medianAbsoluteDeviationMilliseconds, 0.3, accuracy: 0.001)
+        XCTAssertEqual(fallback.summary!.spreadMilliseconds, 1.2, accuracy: 0.001)
+        XCTAssertEqual(pass.quality, .provisional)
+        XCTAssertTrue(pass.canApplyCompensation)
+        XCTAssertEqual(pass.rejectedBySpeaker[2].count, 5)
+        let delays = try DelayCompensation.calculate(arrivalMilliseconds: pass.speakerEstimates.compactMap(\.delayMilliseconds)).delays
+        XCTAssertEqual(delays[2], 153.35, accuracy: 0.001)
+    }
+
+    func testScatteredCandidatesExposeBestRawWithoutAutomaticCompensation() throws {
+        let measurements = [candidate(80, confidence: 0.1), candidate(190, confidence: 0.15), candidate(290, confidence: 0.33), candidate(400, confidence: 0.2), candidate(520, confidence: 0.12)]
+        let result = SpeakerCalibrationEstimate(measurements: measurements)
+        XCTAssertEqual(result.quality, .poor)
+        XCTAssertEqual(result.delayMilliseconds, 290)
+        XCTAssertFalse(result.canApply)
+        XCTAssertEqual(result.method, "strongestRawCandidate")
+        let pass = try CalibrationPassMeasurements(pass: 0, measurementsBySpeaker: [[candidate(318, accepted: true)], measurements], failures: [])
+        XCTAssertFalse(pass.canApplyCompensation)
+        XCTAssertNotNil(pass.residualSpreadMilliseconds)
+    }
+
+    func testAcceptedMedianDominatesEvenLargerRejectedCluster() {
+        let measurements = [candidate(110, accepted: true), candidate(112, accepted: true)] + [400, 400.2, 400.5, 110.8].map { candidate($0) }
+        let result = SpeakerCalibrationEstimate(measurements: measurements)
+        XCTAssertEqual(result.delayMilliseconds, 111)
+        XCTAssertEqual(result.quality, .provisional)
+        XCTAssertEqual(result.method, "acceptedMedian")
+        XCTAssertEqual(result.acceptedMeasurementCount, 2)
+    }
+
+    func testMissingSpeakerDoesNotEraseOtherSpeakersOrInventResidual() throws {
+        let pass = try CalibrationPassMeasurements(pass: 0, measurementsBySpeaker: [[candidate(100, accepted: true)], []], failures: ["capture failure"])
+        XCTAssertEqual(pass.speakerEstimates[0].delayMilliseconds, 100)
+        XCTAssertNil(pass.speakerEstimates[1].delayMilliseconds)
+        XCTAssertEqual(pass.quality, .unavailable)
+        XCTAssertFalse(pass.canApplyCompensation)
+        XCTAssertNil(pass.residualSpreadMilliseconds)
+        XCTAssertEqual(pass.relativeArrivalsToReferenceMilliseconds, [])
+        XCTAssertNoThrow(try JSONEncoder().encode(pass))
+    }
+
+    func testClusterDoesNotChainAndTiedClustersRemainPoor() {
+        for values in [[100.0, 102, 104, 106, 108], [100, 100.2, 400, 400.2]] {
+            XCTAssertEqual(SpeakerCalibrationEstimate(measurements: values.map { candidate($0) }).quality, .poor)
+        }
+    }
+
+    func testABConsistencyBreaksTieBetweenWeakRawCandidates() {
+        let result = SpeakerCalibrationEstimate(measurements: [candidate(100, abDifference: 20), candidate(400, abDifference: 0.1)])
+        XCTAssertEqual(result.delayMilliseconds, 400)
+        XCTAssertEqual(result.quality, .poor)
+    }
+}

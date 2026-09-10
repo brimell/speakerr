@@ -221,6 +221,10 @@ struct SpeakerrTest {
                 let measured = try await session.waitForPass(pass)
                 completedPasses.append(measured)
                 printPass(measured, outputs: [outputA, outputB], verbose: options.verbose)
+                guard measured.canApplyCompensation else {
+                    print("Timing estimates are too uncertain; compensation was not applied.")
+                    break
+                }
                 let residual = measured.relativeArrivalBMinusAMilliseconds
                 residuals.append(residual)
 
@@ -486,7 +490,7 @@ struct SpeakerrTest {
                 do {
                     let measurement = try await session.recheck(input: microphone)
                     let residual = measurement.relativeArrivalBMinusAMilliseconds
-                    lastRecheckResidual = residual
+                    lastRecheckResidual = measurement.canApplyCompensation ? residual : nil
                     print("\nCurrent acoustic residual: \(String(format: "%+.2f", residual)) ms")
                     let early = residual >= 0 ? outputB.name : outputA.name
                     print("\(early) is early by \(String(format: "%.2f", abs(residual))) ms.")

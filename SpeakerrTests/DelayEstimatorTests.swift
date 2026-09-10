@@ -167,3 +167,40 @@ final class DelayEstimatorTests: XCTestCase {
         }
     }
 }
+
+extension DelayEstimatorTests {
+    func testIndependentGolayOffsetsShareArrivalCoordinateWithNonzeroSearchOrigin() throws {
+        let rate = 48_000.0
+        let signal = try GolayComplementaryPairGenerator().generate(sampleRate: rate)
+        let (a, b) = signal.complementarySequences!
+        let delay = 700
+        let spacing = a.count + signal.interSequenceSilenceSamples
+        var recording = [Float](repeating: 0, count: signal.samples.count + 2_000)
+        for i in a.indices { recording[delay + i] = a[i] }
+        for i in b.indices { recording[delay + spacing + 24 + i] = -b[i] }
+        let diagnostic = try estimator.diagnoseDelay(referenceA: a, referenceB: b, recording: recording, sampleRate: rate, interSequenceSilenceSamples: signal.interSequenceSilenceSamples, searchRange: 100..<1_500)
+        XCTAssertEqual(diagnostic.aBestStartOffset, 700)
+        XCTAssertEqual(diagnostic.bBestArrivalOffset, 724)
+        XCTAssertEqual(diagnostic.bBestStartOffset, Double(724 + spacing))
+        XCTAssertEqual(diagnostic.abSeparationErrorSamples * 1_000 / rate, 0.5)
+        XCTAssertGreaterThan(diagnostic.aBestSignedPeak, 0.99)
+        XCTAssertLessThan(diagnostic.bBestSignedPeak, -0.99)
+        XCTAssertEqual(diagnostic.signedCombinedPeak, diagnostic.combinedSignedCorrelations[diagnostic.peakIndex - diagnostic.searchRange.lowerBound])
+    }
+
+    func testGolayQualityFailureKeepsCandidateAndSilenceHasNone() throws {
+        let signal = try GolayComplementaryPairGenerator().generate(sampleRate: 48_000)
+        let (a, b) = signal.complementarySequences!
+        let strict = NormalizedCrossCorrelationEstimator(minimumConfidence: 1.1)
+        let recording = [Float](repeating: 0, count: 500) + signal.samples + [Float](repeating: 0, count: 500)
+        let candidate = try strict.estimateDelay(referenceA: a, referenceB: b, recording: recording, sampleRate: 48_000, interSequenceSilenceSamples: signal.interSequenceSilenceSamples)
+        XCTAssertFalse(candidate.accepted)
+        XCTAssertEqual(candidate.sampleOffset, 500, accuracy: 0.05)
+        XCTAssertEqual(candidate.abLatencyDifferenceMilliseconds, 0)
+        XCTAssertThrowsError(try estimator.estimateDelay(referenceA: a, referenceB: b, recording: Array(repeating: 0, count: recording.count), sampleRate: 48_000, interSequenceSilenceSamples: signal.interSequenceSilenceSamples))
+        XCTAssertThrowsError(try estimator.estimateDelay(referenceA: a, referenceB: b, recording: recording, sampleRate: .nan, interSequenceSilenceSamples: 0))
+        var invalid = recording
+        invalid[0] = .nan
+        XCTAssertThrowsError(try estimator.estimateDelay(referenceA: a, referenceB: b, recording: invalid, sampleRate: 48_000, interSequenceSilenceSamples: 0))
+    }
+}

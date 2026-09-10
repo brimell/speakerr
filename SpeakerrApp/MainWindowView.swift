@@ -119,6 +119,7 @@ struct MainWindowView: View {
                     .disabled(model.presentation.status != .aligned && model.presentation.status != .alignmentDrifting)
                 if model.presentation.status == .alignmentDrifting {
                     Button("Apply Correction") { model.applyLatestCorrection() }
+                        .disabled(!model.canApplyLatestCorrection)
                 }
             }
         }
