@@ -3,13 +3,13 @@ import CoreAudio
 import Foundation
 import Synchronization
 
-private enum PersistentRenderMode: UInt32 {
+enum PersistentRenderMode: UInt32 {
     case muted = 0
     case programme = 1
     case calibration = 2
 }
 
-private final class PersistentRenderState: @unchecked Sendable {
+final class PersistentRenderState: @unchecked Sendable {
     static let maximumFrames: UInt32 = 4096
     let renderedFrames = Atomic<Int64>(0)
     let callbackCount = Atomic<UInt64>(0)
@@ -181,9 +181,6 @@ private final class PersistentRenderState: @unchecked Sendable {
                 case .silence: break
                 }
             }
-        }
-        if currentMode == .programme, routingMode == .mono, let firstRoute = delayedLeft.first {
-            OutputChannelMap.writeToAllChannels(UnsafePointer(firstRoute), to: buffers, frameCount: count)
         }
         framePosition = blockEnd
         renderedFrames.store(blockEnd, ordering: .releasing)

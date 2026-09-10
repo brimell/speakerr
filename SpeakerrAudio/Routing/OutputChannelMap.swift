@@ -67,24 +67,4 @@ enum OutputChannelMap {
             return
         }
     }
-
-    static func writeToAllChannels(
-        _ source: UnsafePointer<Float>,
-        to buffers: UnsafeMutableAudioBufferListPointer,
-        frameCount: Int
-    ) {
-        for buffer in buffers {
-            let channels = Int(buffer.mNumberChannels)
-            guard channels > 0, let destination = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
-            if channels == 1 {
-                memcpy(destination, source, frameCount * MemoryLayout<Float>.size)
-            } else {
-                for frame in 0..<frameCount {
-                    for channel in 0..<channels {
-                        destination[frame * channels + channel] = source[frame]
-                    }
-                }
-            }
-        }
-    }
 }
