@@ -63,6 +63,29 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
     public var eventsPerPass: Int { selectedSpeakerCount * (measurementsPerSpeaker + maximumRetriesPerSpeaker) }
     public var selectedSpeakerCount: Int
 
+    private enum CodingKeys: String, CodingKey {
+        case preRollSeconds, chirpDurationSeconds, intervalSeconds, passGapSeconds, postRollSeconds
+        case measurementsPerSpeaker, maximumPasses, maximumRetriesPerSpeaker, maximumAcousticLatencySeconds
+        case targetResidualMilliseconds, level, stabilityMeasurementOffsetsSeconds, selectedSpeakerCount
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        preRollSeconds = try values.decode(Double.self, forKey: .preRollSeconds)
+        chirpDurationSeconds = try values.decode(Double.self, forKey: .chirpDurationSeconds)
+        intervalSeconds = try values.decode(Double.self, forKey: .intervalSeconds)
+        passGapSeconds = try values.decode(Double.self, forKey: .passGapSeconds)
+        postRollSeconds = try values.decode(Double.self, forKey: .postRollSeconds)
+        measurementsPerSpeaker = try values.decode(Int.self, forKey: .measurementsPerSpeaker)
+        maximumPasses = try values.decode(Int.self, forKey: .maximumPasses)
+        maximumRetriesPerSpeaker = try values.decode(Int.self, forKey: .maximumRetriesPerSpeaker)
+        maximumAcousticLatencySeconds = try values.decode(Double.self, forKey: .maximumAcousticLatencySeconds)
+        targetResidualMilliseconds = try values.decode(Double.self, forKey: .targetResidualMilliseconds)
+        level = try values.decode(Double.self, forKey: .level)
+        stabilityMeasurementOffsetsSeconds = try values.decode([Double].self, forKey: .stabilityMeasurementOffsetsSeconds)
+        selectedSpeakerCount = try values.decodeIfPresent(Int.self, forKey: .selectedSpeakerCount) ?? 2
+    }
+
     public func passStartSeconds(_ pass: Int) -> Double {
         let passStride = Double(eventsPerPass) * intervalSeconds + passGapSeconds
         if pass < maximumPasses { return preRollSeconds + Double(pass) * passStride }

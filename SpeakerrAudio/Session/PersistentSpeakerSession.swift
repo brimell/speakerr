@@ -391,7 +391,8 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                 let residual = (residualsForSpeakers.max() ?? 0) - (residualsForSpeakers.min() ?? 0)
                 residuals.append(residual)
                 if abs(residual) <= configuration.targetResidualMilliseconds {
-                    let confidence = (measured.measurementsA + measured.measurementsB).map(\.estimate.confidence).reduce(0, +) / Double(measured.measurementsA.count + measured.measurementsB.count)
+                    let allMeasurements = measured.measurementsBySpeaker.flatMap { $0 }
+                    let confidence = allMeasurements.map(\.estimate.confidence).reduce(0, +) / Double(allMeasurements.count)
                     calibrationSnapshot = CalibrationSnapshot(outputUIDs: outputUIDs, sampleRate: sampleRate, compensationByUID: Dictionary(uniqueKeysWithValues: zip(outputUIDs, delayComponents.map(\.calibration))), residualMilliseconds: abs(residual), confidence: confidence, sessionGeneration: generation)
                     _ = try stateMachine.handle(.calibrationSucceeded)
                     resumeProgramme()
