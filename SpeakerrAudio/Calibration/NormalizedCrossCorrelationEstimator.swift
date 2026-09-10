@@ -1,5 +1,9 @@
 import Foundation
 
+public enum DelayEstimateRejectionReason: String, Sendable, Codable {
+    case lowConfidence
+}
+
 public struct DelayEstimate: Sendable, Equatable, Codable {
     public let sampleOffset: Double
     public let milliseconds: Double
@@ -8,7 +12,13 @@ public struct DelayEstimate: Sendable, Equatable, Codable {
     public let secondBestPeak: Double
     public let peakProminence: Double
 
-    public init(sampleOffset: Double, sampleRate: Double, confidence: Double, peakValue: Double, secondBestPeak: Double, peakProminence: Double) {
+    public let rejectionReason: DelayEstimateRejectionReason?
+    public var accepted: Bool { rejectionReason == nil }
+    public let abLatencyDifferenceMilliseconds: Double?
+
+    public init(sampleOffset: Double, sampleRate: Double, confidence: Double, peakValue: Double, secondBestPeak: Double, peakProminence: Double, accepted: Bool = true, abLatencyDifferenceMilliseconds: Double? = nil) {
+        rejectionReason = accepted ? nil : .lowConfidence
+        self.abLatencyDifferenceMilliseconds = abLatencyDifferenceMilliseconds
         self.sampleOffset = sampleOffset
         milliseconds = sampleOffset * 1_000 / sampleRate
         self.confidence = confidence
@@ -35,12 +45,25 @@ public struct DelayCorrelationDiagnostics: Sendable, Equatable {
     public let aCorrelations: [Double]
     public let bCorrelations: [Double]
 
+    public let aSignedCorrelations: [Double]
+    public let bSignedCorrelations: [Double]
+    public let combinedSignedCorrelations: [Double]
+    /// B is expressed in A-arrival coordinates, with probe spacing removed.
+    public let aBestStartOffset: Double
+    public let bBestArrivalOffset: Double
+    public let expectedBStartRelativeToA: Int
+    public let aBestSignedPeak: Double
+    public let bBestSignedPeak: Double
+    public var bBestStartOffset: Double { bBestArrivalOffset + Double(expectedBStartRelativeToA) }
+    public var abSeparationErrorSamples: Double { bBestArrivalOffset - aBestStartOffset }
+
     public var candidateNearSearchBoundary: Bool {
         peakIndex == searchRange.lowerBound || peakIndex + 1 >= searchRange.upperBound
     }
 }
 
 public enum DelayEstimatorError: LocalizedError, Equatable {
+    case numericalFailure
     case invalidSampleRate
     case insufficientRecording
     case invalidSearchWindow
@@ -49,6 +72,7 @@ public enum DelayEstimatorError: LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
+        case .numericalFailure: "Correlation contains invalid numerical values."
         case .invalidSampleRate: "Delay-estimator sample rate must be positive."
         case .insufficientRecording: "The recording is shorter than the calibration signal."
         case .invalidSearchWindow: "The requested correlation search window contains no complete signal."
@@ -85,11 +109,7 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
         searchRange: Range<Int>? = nil
     ) throws -> DelayEstimate {
         let diagnostics = try diagnoseDelay(referenceA: referenceA, referenceB: referenceB, recording: recording, sampleRate: sampleRate, interSequenceSilenceSamples: interSequenceSilenceSamples, searchRange: searchRange)
-        let estimate = DelayEstimate(sampleOffset: diagnostics.sampleOffset, sampleRate: sampleRate, confidence: diagnostics.confidence, peakValue: diagnostics.peakValue, secondBestPeak: diagnostics.secondBestPeak, peakProminence: diagnostics.peakProminence)
-        guard diagnostics.peakValue >= minimumPeak, diagnostics.peakProminence >= minimumProminence, diagnostics.confidence >= minimumConfidence else {
-            throw DelayEstimatorError.lowConfidence(confidence: diagnostics.confidence, peak: diagnostics.peakValue, secondBestPeak: diagnostics.secondBestPeak, prominence: diagnostics.peakProminence, sampleOffset: estimate.sampleOffset)
-        }
-        return estimate
+        return try estimateDelay(from: diagnostics, sampleRate: sampleRate)
     }
 
     public func diagnoseDelay(
@@ -100,6 +120,8 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
         interSequenceSilenceSamples: Int,
         searchRange: Range<Int>? = nil
     ) throws -> DelayCorrelationDiagnostics {
+        guard sampleRate.isFinite, sampleRate > 0 else { throw DelayEstimatorError.invalidSampleRate }
+        guard referenceA.allSatisfy(\.isFinite), referenceB.allSatisfy(\.isFinite), recording.allSatisfy(\.isFinite) else { throw DelayEstimatorError.numericalFailure }
         guard referenceA.count == referenceB.count, !referenceA.isEmpty else {
             throw DelayEstimatorError.insufficientRecording
         }
@@ -116,24 +138,28 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
         let secondUpper = upper + referenceA.count + max(0, interSequenceSilenceSamples)
         let second = correlationSeries(reference: referenceB, recording: recording, lower: secondLower, upper: secondUpper)
         let combinedReferenceEnergy = first.referenceEnergy + second.referenceEnergy
-        let aCorrelations = first.numerators.indices.map { index in
+        let aSignedCorrelations = first.numerators.indices.map { index in
             let denominator = sqrt(first.referenceEnergy * first.recordingEnergies[index])
-            return denominator > 1e-12 ? abs(first.numerators[index] / denominator) : 0
+            return denominator > 1e-12 ? first.numerators[index] / denominator : 0
         }
-        let bCorrelations = second.numerators.indices.map { index in
+        let bSignedCorrelations = second.numerators.indices.map { index in
             let denominator = sqrt(second.referenceEnergy * second.recordingEnergies[index])
-            return denominator > 1e-12 ? abs(second.numerators[index] / denominator) : 0
+            return denominator > 1e-12 ? second.numerators[index] / denominator : 0
         }
-        let correlations = first.numerators.indices.map { index in
+        let combinedSignedCorrelations = first.numerators.indices.map { index in
             let combinedRecordingEnergy = first.recordingEnergies[index] + second.recordingEnergies[index]
             let denominator = sqrt(combinedReferenceEnergy * combinedRecordingEnergy)
             let numerator = first.numerators[index] + second.numerators[index]
-            return denominator > 1e-12 ? abs(numerator / denominator) : 0
+            return denominator > 1e-12 ? numerator / denominator : 0
         }
+        let aCorrelations = aSignedCorrelations.map { abs($0) }
+        let bCorrelations = bSignedCorrelations.map { abs($0) }
+        let correlations = combinedSignedCorrelations.map { abs($0) }
         guard let peakIndex = correlations.indices.max(by: { correlations[$0] < correlations[$1] }) else {
             throw DelayEstimatorError.invalidSearchWindow
         }
         let peak = correlations[peakIndex]
+        guard peak.isFinite, peak > 1e-12 else { throw DelayEstimatorError.signalTooWeak }
         let exclusion = max(1, Int((exclusionMilliseconds * sampleRate / 1_000).rounded()))
         let secondBest = correlations.indices
             .filter { abs($0 - peakIndex) > exclusion }
@@ -155,10 +181,9 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
             }
         }
         let candidateIndex = lower + peakIndex
-        let combinedDenominator = sqrt(combinedReferenceEnergy * (first.recordingEnergies[candidateIndex - lower] + second.recordingEnergies[candidateIndex - lower]))
-        let signedCombinedPeak = combinedDenominator > 1e-12
-            ? (first.numerators[peakIndex - lower] + second.numerators[peakIndex - lower]) / combinedDenominator
-            : 0
+        let signedCombinedPeak = combinedSignedCorrelations[peakIndex]
+        let aBest = aCorrelations.indices.max(by: { aCorrelations[$0] < aCorrelations[$1] })!
+        let bBest = bCorrelations.indices.max(by: { bCorrelations[$0] < bCorrelations[$1] })!
         return DelayCorrelationDiagnostics(
             sampleOffset: Double(lower) + fractionalIndex,
             peakIndex: candidateIndex,
@@ -174,20 +199,30 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
             signedCombinedPeak: signedCombinedPeak,
             correlations: correlations,
             aCorrelations: aCorrelations,
-            bCorrelations: bCorrelations
+            bCorrelations: bCorrelations,
+            aSignedCorrelations: aSignedCorrelations,
+            bSignedCorrelations: bSignedCorrelations,
+            combinedSignedCorrelations: combinedSignedCorrelations,
+            aBestStartOffset: Double(lower + aBest),
+            bBestArrivalOffset: Double(lower + bBest),
+            expectedBStartRelativeToA: referenceA.count + max(0, interSequenceSilenceSamples),
+            aBestSignedPeak: aSignedCorrelations[aBest],
+            bBestSignedPeak: bSignedCorrelations[bBest]
         )
     }
 
     public func estimateDelay(from diagnostics: DelayCorrelationDiagnostics, sampleRate: Double) throws -> DelayEstimate {
-        let estimate = DelayEstimate(sampleOffset: diagnostics.sampleOffset, sampleRate: sampleRate, confidence: diagnostics.confidence, peakValue: diagnostics.peakValue, secondBestPeak: diagnostics.secondBestPeak, peakProminence: diagnostics.peakProminence)
-        guard diagnostics.peakValue >= minimumPeak, diagnostics.peakProminence >= minimumProminence, diagnostics.confidence >= minimumConfidence else {
-            throw DelayEstimatorError.lowConfidence(confidence: diagnostics.confidence, peak: diagnostics.peakValue, secondBestPeak: diagnostics.secondBestPeak, prominence: diagnostics.peakProminence, sampleOffset: estimate.sampleOffset)
-        }
-        return estimate
+        guard sampleRate.isFinite, sampleRate > 0 else { throw DelayEstimatorError.invalidSampleRate }
+        guard diagnostics.peakValue.isFinite, diagnostics.sampleOffset.isFinite else { throw DelayEstimatorError.numericalFailure }
+        guard diagnostics.peakValue > 1e-12 else { throw DelayEstimatorError.signalTooWeak }
+        return DelayEstimate(sampleOffset: diagnostics.sampleOffset, sampleRate: sampleRate, confidence: diagnostics.confidence, peakValue: diagnostics.peakValue, secondBestPeak: diagnostics.secondBestPeak, peakProminence: diagnostics.peakProminence,
+            accepted: diagnostics.peakValue >= minimumPeak && diagnostics.peakProminence >= minimumProminence && diagnostics.confidence >= minimumConfidence,
+            abLatencyDifferenceMilliseconds: diagnostics.abSeparationErrorSamples * 1_000 / sampleRate)
     }
 
     public func estimateDelay(reference: [Float], recording: [Float], sampleRate: Double, searchRange: Range<Int>? = nil) throws -> DelayEstimate {
-        guard sampleRate > 0 else { throw DelayEstimatorError.invalidSampleRate }
+        guard sampleRate.isFinite, sampleRate > 0 else { throw DelayEstimatorError.invalidSampleRate }
+        guard reference.allSatisfy(\.isFinite), recording.allSatisfy(\.isFinite) else { throw DelayEstimatorError.numericalFailure }
         guard !reference.isEmpty, recording.count >= reference.count else { throw DelayEstimatorError.insufficientRecording }
         let maximumStart = recording.count - reference.count + 1
         let requested = searchRange ?? 0..<maximumStart
@@ -228,6 +263,7 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
             throw DelayEstimatorError.invalidSearchWindow
         }
         let peak = correlations[localPeakIndex]
+        guard peak.isFinite, peak > 1e-12 else { throw DelayEstimatorError.signalTooWeak }
         let exclusion = max(1, Int((exclusionMilliseconds * sampleRate / 1_000).rounded()))
         var secondBest = 0.0
         for index in correlations.indices where abs(index - localPeakIndex) > exclusion {
@@ -255,11 +291,9 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
             confidence: confidence,
             peakValue: peak,
             secondBestPeak: secondBest,
-            peakProminence: prominence
+            peakProminence: prominence,
+            accepted: peak >= minimumPeak && prominence >= minimumProminence && confidence >= minimumConfidence
         )
-        guard peak >= minimumPeak, prominence >= minimumProminence, confidence >= minimumConfidence else {
-            throw DelayEstimatorError.lowConfidence(confidence: confidence, peak: peak, secondBestPeak: secondBest, prominence: prominence, sampleOffset: estimate.sampleOffset)
-        }
         return estimate
     }
 

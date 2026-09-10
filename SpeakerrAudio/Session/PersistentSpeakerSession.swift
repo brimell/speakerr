@@ -345,7 +345,12 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             precondition(aggregate.driftCompensatedUIDs.count == max(0, outputs.count - 1), "Every non-master output must use drift compensation")
             #endif
             calibrationLogger.notice("Calibration session creation outputs.count=\(self.outputs.count, privacy: .public) outputNames=\(self.outputs.map(\.name), privacy: .public) outputUIDs=\(self.outputUIDs, privacy: .public) aggregateSubdeviceCount=\(aggregate.channelCounts.count, privacy: .public) aggregate.channelCounts=\(aggregate.channelCounts, privacy: .public) aggregate.driftCompensatedUIDs=\(aggregate.driftCompensatedUIDs, privacy: .public)")
-            let chirp = try GolayComplementaryPairGenerator(level: calibrationLevel).generate(sampleRate: sampleRate)
+            #if DEBUG
+            let probeLevel = 0.12
+            #else
+            let probeLevel = calibrationLevel
+            #endif
+            let chirp = try GolayComplementaryPairGenerator(level: probeLevel).generate(sampleRate: sampleRate)
             let state = try PersistentRenderState(sampleRate: sampleRate, chirp: chirp.samples, transport: transport, channelCounts: aggregate.channelCounts, channelOffsets: aggregate.channelOffsets, delays: delayComponents.map(\.effectiveMilliseconds), routingMode: routingMode)
             #if DEBUG
             precondition(delayComponents.count == outputs.count, "Delay components must match outputs")

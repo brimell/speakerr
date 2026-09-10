@@ -60,9 +60,10 @@ final class DelayEstimatorTests: XCTestCase {
         let reference = try LogarithmicChirpGenerator(durationSeconds: 0.08).generate(sampleRate: rate).samples
         var recording = syntheticRecording(reference: reference, sampleRate: rate, delayMilliseconds: 40, tailMilliseconds: 150)
         add(reference, to: &recording, at: Int(100 * rate / 1_000), gain: 1)
-        XCTAssertThrowsError(try estimator.estimateDelay(reference: reference, recording: recording, sampleRate: rate)) {
-            guard case .lowConfidence = $0 as? DelayEstimatorError else { return XCTFail("Expected low confidence, got \($0)") }
-        }
+        let candidate = try estimator.estimateDelay(reference: reference, recording: recording, sampleRate: rate)
+        XCTAssertFalse(candidate.accepted)
+        XCTAssertEqual(candidate.rejectionReason, .lowConfidence)
+        XCTAssertTrue(candidate.milliseconds.isFinite)
 
     }
 
