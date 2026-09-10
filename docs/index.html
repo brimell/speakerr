@@ -1,600 +1,226 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>speakerr | Free 10-Band Parametric EQ for macOS</title>
-    <meta name="description" content="speakerr is a free, open-source macOS parametric equalizer with real-time response and spectrum views, dual bypass controls, AutoEQ import, and profile-aware routing.">
-    <meta name="keywords" content="SoundSource alternative, macOS equalizer, free EQ Mac, parametric EQ, AutoEQ, HDMI volume macOS, open-source audio tool">
-    <meta name="author" content="brimell">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#09111f">
+    <title>Speakerr — Synchronized audio for Mac</title>
+    <meta name="description" content="A practical guide to setting up Speakerr, selecting two speakers, calibrating their timing, and starting synchronized Mac audio playback.">
+    <meta property="og:title" content="Speakerr — Synchronized audio for Mac">
+    <meta property="og:description" content="Set up a synchronized pair of speakers in a few clear steps.">
     <meta property="og:type" content="website">
-    <meta property="og:title" content="speakerr | Free 10-Band Parametric EQ for macOS">
-    <meta property="og:description" content="Free, open-source system-wide EQ with real-time analyzers, smart device profiles, and AutoEQ correction/import.">
-    <meta property="og:url" content="https://brimell.github.io/SoundMax/">
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="speakerr | Free Parametric EQ for macOS">
-    <meta name="twitter:description" content="A lightweight SoundSource alternative with real-time EQ, AutoEQ, and HDMI volume control.">
-
+    <meta property="og:url" content="https://brimell.github.io/speakerr/">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
 
         :root {
-            --bg: #f4efe5;
-            --paper: #fffaf2;
-            --ink: #1a2233;
-            --ink-soft: #47556d;
-            --line: #d8d1c4;
-            --accent: #e24f3b;
-            --accent-deep: #bb3f2f;
-            --accent-soft: #ffd8d2;
-            --teal: #1f6f72;
-            --shadow: 0 18px 40px rgba(26, 34, 51, 0.12);
-            --radius-lg: 18px;
-            --radius-md: 12px;
-            --radius-sm: 9px;
+            --ink: #eaf1f7;
+            --muted: #aab8c8;
+            --navy: #09111f;
+            --panel: #101c2d;
+            --panel-light: #16263a;
+            --line: rgba(200, 220, 238, .14);
+            --cyan: #6ee7db;
+            --cyan-deep: #2faaa5;
+            --orange: #ffb870;
+            --white: #fff;
+            --shadow: 0 24px 80px rgba(0, 0, 0, .3);
+            --radius: 22px;
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
         body {
-            font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+            margin: 0;
             color: var(--ink);
             background:
-                radial-gradient(circle at 8% 12%, rgba(226, 79, 59, 0.18), transparent 24%),
-                radial-gradient(circle at 88% 8%, rgba(31, 111, 114, 0.16), transparent 22%),
-                linear-gradient(180deg, #f7f2e8 0%, #f4efe5 48%, #f1ebde 100%);
-            line-height: 1.55;
+                radial-gradient(circle at 8% 0%, rgba(53, 166, 163, .18), transparent 30rem),
+                radial-gradient(circle at 90% 12%, rgba(255, 184, 112, .1), transparent 26rem),
+                var(--navy);
+            font-family: Manrope, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            line-height: 1.65;
         }
-
-        .container {
-            width: min(1120px, calc(100vw - 2.4rem));
-            margin: 0 auto;
-            padding: 2rem 0 3.25rem;
+        a { color: inherit; }
+        .skip-link {
+            position: absolute; left: 1rem; top: -4rem; z-index: 10;
+            background: var(--cyan); color: var(--navy); padding: .65rem 1rem; border-radius: 8px;
         }
-
-        .hero {
-            background: linear-gradient(145deg, rgba(255, 250, 242, 0.95), rgba(245, 237, 222, 0.95));
-            border: 1px solid var(--line);
-            border-radius: calc(var(--radius-lg) + 4px);
-            box-shadow: var(--shadow);
-            padding: 2.5rem 2rem 2rem;
-            text-align: center;
-            animation: lift 450ms ease-out both;
+        .skip-link:focus { top: 1rem; }
+        .wrap { width: min(1120px, calc(100% - 40px)); margin: auto; }
+        .topbar {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 25px 0; border-bottom: 1px solid var(--line);
         }
-
+        .brand { display: flex; gap: .7rem; align-items: center; text-decoration: none; font-weight: 800; letter-spacing: -.03em; }
+        .brand-mark {
+            display: grid; place-items: center; width: 33px; height: 33px; border-radius: 10px;
+            color: var(--navy); background: var(--cyan); font-size: .9rem; font-weight: 800;
+        }
+        nav { display: flex; gap: 1.4rem; color: var(--muted); font-size: .86rem; font-weight: 600; }
+        nav a { text-decoration: none; }
+        nav a:hover, nav a:focus { color: var(--cyan); }
+        .hero { padding: clamp(65px, 10vw, 120px) 0 85px; max-width: 820px; }
         .eyebrow {
-            display: inline-block;
-            font-family: 'Sora', 'IBM Plex Sans', sans-serif;
-            font-size: 0.78rem;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--teal);
-            border: 1px solid rgba(31, 111, 114, 0.32);
-            background: rgba(31, 111, 114, 0.08);
-            border-radius: 999px;
-            padding: 0.35rem 0.75rem;
-            margin-bottom: 1rem;
+            display: inline-flex; align-items: center; gap: .55rem; color: var(--cyan);
+            font: 500 .76rem "DM Mono", monospace; letter-spacing: .12em; text-transform: uppercase;
         }
-
-        h1,
-        h2,
-        h3 {
-            font-family: 'Sora', 'IBM Plex Sans', sans-serif;
-            line-height: 1.15;
+        .eyebrow::before { content: ""; width: 24px; height: 1px; background: var(--cyan); }
+        h1, h2, h3 { margin: 0; line-height: 1.12; letter-spacing: -.045em; }
+        h1 { max-width: 780px; margin-top: 1.25rem; font-size: clamp(3.2rem, 8vw, 6.5rem); font-weight: 800; }
+        h1 em { color: var(--cyan); font-style: normal; }
+        .hero p { max-width: 640px; margin: 1.5rem 0 0; color: var(--muted); font-size: clamp(1.05rem, 2vw, 1.25rem); }
+        .actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 2rem; }
+        .button {
+            display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+            min-height: 46px; padding: .7rem 1.1rem; border: 1px solid var(--line); border-radius: 9px;
+            text-decoration: none; font-weight: 700; font-size: .88rem; transition: transform .2s, background .2s;
         }
-
-        h1 {
-            font-size: clamp(2rem, 5.4vw, 3.8rem);
-            margin-bottom: 0.7rem;
-            letter-spacing: -0.03em;
+        .button:hover { transform: translateY(-2px); }
+        .button.primary { color: var(--navy); border-color: var(--cyan); background: var(--cyan); }
+        .button.secondary { background: rgba(255, 255, 255, .03); }
+        .button.secondary:hover { background: rgba(255, 255, 255, .08); }
+        .section { padding: 75px 0; border-top: 1px solid var(--line); }
+        .section-heading { display: flex; justify-content: space-between; align-items: end; gap: 2rem; margin-bottom: 2rem; }
+        .section-heading h2 { font-size: clamp(2rem, 4vw, 3.3rem); }
+        .section-heading p { max-width: 430px; margin: 0; color: var(--muted); }
+        .kicker { margin: 0 0 .7rem; color: var(--orange); font: 500 .72rem "DM Mono", monospace; letter-spacing: .08em; text-transform: uppercase; }
+        .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+        .step, .card { padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(145deg, rgba(22, 38, 58, .88), rgba(16, 28, 45, .88)); }
+        .step-number {
+            display: grid; place-items: center; width: 30px; height: 30px; margin-bottom: 1.25rem;
+            border-radius: 50%; color: var(--navy); background: var(--orange); font: 500 .8rem "DM Mono", monospace;
         }
-
-        h1 span {
-            color: var(--accent);
+        .step h3, .card h3 { margin-bottom: .65rem; font-size: 1.05rem; letter-spacing: -.02em; }
+        .step p, .card p { margin: 0; color: var(--muted); font-size: .9rem; }
+        .note {
+            display: flex; gap: .8rem; margin-top: 1rem; padding: 1rem 1.15rem; border-left: 2px solid var(--cyan);
+            color: var(--muted); background: rgba(110, 231, 219, .06); font-size: .9rem;
         }
-
-        .lead {
-            color: var(--ink-soft);
-            max-width: 760px;
-            margin: 0 auto;
-            font-size: clamp(1rem, 2.2vw, 1.16rem);
+        .note strong { color: var(--ink); }
+        .flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 12px; align-items: center; }
+        .flow-node { padding: 1.35rem 1rem; text-align: center; border: 1px solid var(--line); border-radius: 15px; background: var(--panel); }
+        .flow-node strong { display: block; margin-bottom: .2rem; }
+        .flow-node span { color: var(--muted); font-size: .78rem; }
+        .arrow { color: var(--cyan); font-size: 1.4rem; }
+        .tutorial { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .tutorial .card { min-height: 250px; }
+        .tutorial .card > .tag { display: inline-block; margin-bottom: 1.2rem; color: var(--cyan); font: 500 .68rem "DM Mono", monospace; letter-spacing: .08em; text-transform: uppercase; }
+        ol, ul { padding-left: 1.2rem; }
+        li { margin: .5rem 0; color: var(--muted); font-size: .91rem; }
+        li strong { color: var(--ink); }
+        code { padding: .15rem .35rem; border-radius: 5px; color: var(--cyan); background: rgba(110, 231, 219, .1); font: .9em "DM Mono", monospace; }
+        .quote { padding: 2rem; border: 1px solid rgba(255, 184, 112, .28); border-radius: var(--radius); background: rgba(255, 184, 112, .06); }
+        .quote p { max-width: 720px; margin: 0; font-size: 1.35rem; letter-spacing: -.025em; }
+        .quote cite { display: block; margin-top: 1rem; color: var(--orange); font: .72rem "DM Mono", monospace; font-style: normal; text-transform: uppercase; letter-spacing: .08em; }
+        .faq { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        details { padding: 1.2rem 1.3rem; border: 1px solid var(--line); border-radius: 13px; background: rgba(16, 28, 45, .72); }
+        summary { cursor: pointer; font-weight: 700; }
+        details p { margin: .8rem 0 0; color: var(--muted); font-size: .9rem; }
+        footer { padding: 35px 0 45px; border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; }
+        footer a { color: var(--cyan); }
+        @media (max-width: 760px) {
+            .wrap { width: min(100% - 28px, 1120px); }
+            nav { gap: .7rem; } nav a.hide-small { display: none; }
+            .hero { padding-top: 65px; }
+            .steps, .tutorial, .faq { grid-template-columns: 1fr; }
+            .section-heading { display: block; } .section-heading p { margin-top: 1rem; }
+            .flow { grid-template-columns: 1fr; } .arrow { transform: rotate(90deg); text-align: center; }
         }
-
-        .muted {
-            color: var(--ink-soft);
-        }
-
-        .badges {
-            margin-top: 1.3rem;
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 0.5rem;
-        }
-
-        .cta {
-            margin-top: 1.5rem;
-            display: flex;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 0.75rem;
-        }
-
-        .btn {
-            text-decoration: none;
-            border-radius: var(--radius-sm);
-            font-family: 'Sora', 'IBM Plex Sans', sans-serif;
-            font-weight: 700;
-            font-size: 0.92rem;
-            letter-spacing: 0.01em;
-            padding: 0.78rem 1.15rem;
-            transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-        }
-
-        .btn-primary {
-            color: #fff;
-            background: linear-gradient(160deg, var(--accent), var(--accent-deep));
-            box-shadow: 0 12px 18px rgba(178, 55, 38, 0.24);
-        }
-
-        .btn-secondary {
-            color: var(--ink);
-            border: 1px solid var(--line);
-            background: var(--paper);
-        }
-
-        .section {
-            margin-top: 2.2rem;
-            background: rgba(255, 250, 242, 0.88);
-            border: 1px solid var(--line);
-            border-radius: var(--radius-lg);
-            padding: 1.6rem;
-            box-shadow: 0 8px 20px rgba(33, 40, 58, 0.07);
-            animation: lift 620ms ease-out both;
-        }
-
-        .section-title {
-            margin-bottom: 1rem;
-            font-size: clamp(1.35rem, 3.1vw, 1.95rem);
-            letter-spacing: -0.02em;
-        }
-
-        .feature-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 0.9rem;
-        }
-
-        .feature-card {
-            border: 1px solid var(--line);
-            border-radius: var(--radius-md);
-            padding: 1rem;
-            background: rgba(255, 255, 255, 0.8);
-            transition: transform 190ms ease, box-shadow 190ms ease;
-        }
-
-        .feature-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 20px rgba(33, 40, 58, 0.09);
-        }
-
-        .feature-card h3 {
-            font-size: 1.01rem;
-            margin-bottom: 0.45rem;
-            color: var(--accent-deep);
-        }
-
-        .screens {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 0.9rem;
-        }
-
-        figure {
-            border: 1px solid var(--line);
-            background: #fff;
-            border-radius: var(--radius-md);
-            padding: 0.72rem;
-        }
-
-        figure img {
-            width: 100%;
-            height: auto;
-            border-radius: 10px;
-            display: block;
-            box-shadow: 0 7px 17px rgba(29, 40, 62, 0.2);
-        }
-
-        figcaption {
-            margin-top: 0.62rem;
-            font-size: 0.9rem;
-            color: var(--ink-soft);
-        }
-
-        .comparison-wrap {
-            overflow-x: auto;
-            border: 1px solid var(--line);
-            border-radius: var(--radius-md);
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            min-width: 640px;
-            background: #fff;
-        }
-
-        th,
-        td {
-            border-bottom: 1px solid #ebe3d5;
-            padding: 0.78rem;
-            text-align: left;
-            vertical-align: top;
-        }
-
-        th {
-            background: #f4e8d6;
-            font-family: 'Sora', 'IBM Plex Sans', sans-serif;
-            font-size: 0.82rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: #405267;
-        }
-
-        .good {
-            color: #1f6f72;
-            font-weight: 700;
-        }
-
-        .bad {
-            color: #a04a4a;
-            font-weight: 600;
-        }
-
-        .steps {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 0.8rem;
-            margin-top: 0.9rem;
-        }
-
-        .step {
-            background: #fff;
-            border: 1px solid var(--line);
-            border-radius: var(--radius-md);
-            padding: 0.9rem;
-        }
-
-        .step-index {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 1.6rem;
-            height: 1.6rem;
-            border-radius: 999px;
-            font-size: 0.84rem;
-            font-family: 'Sora', 'IBM Plex Sans', sans-serif;
-            font-weight: 700;
-            color: #fff;
-            background: var(--teal);
-            margin-bottom: 0.55rem;
-        }
-
-        .code {
-            margin-top: 0.9rem;
-            border: 1px solid #d8d0bf;
-            border-radius: var(--radius-sm);
-            background: #2c3242;
-            color: #f6f6f8;
-            font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
-            font-size: 0.88rem;
-            padding: 0.82rem;
-            overflow-x: auto;
-        }
-
-        footer {
-            margin-top: 2.2rem;
-            text-align: center;
-            color: var(--ink-soft);
-            font-size: 0.94rem;
-        }
-
-        footer a {
-            color: var(--accent-deep);
-            text-underline-offset: 2px;
-        }
-
-        @keyframes lift {
-            from {
-                opacity: 0;
-                transform: translateY(8px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @media (max-width: 980px) {
-            .feature-grid,
-            .screens,
-            .steps {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-        }
-
-        @media (max-width: 720px) {
-            .container {
-                width: min(1120px, calc(100vw - 1.4rem));
-                padding-top: 1.2rem;
-            }
-
-            .hero,
-            .section {
-                padding: 1.2rem;
-            }
-
-            .feature-grid,
-            .screens,
-            .steps {
-                grid-template-columns: 1fr;
-            }
-
-            .cta {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .btn {
-                text-align: center;
-            }
-        }
+        @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition: none !important; } }
     </style>
 </head>
 <body>
-    <main class="container">
-        <header class="hero">
-            <p class="eyebrow">System-Wide Audio on macOS</p>
-            <h1>Sound<span>Maxx</span></h1>
-            <p class="lead">A free, open-source parametric EQ for macOS with frequency/Q control, live response and spectrum views, and profile-aware routing.</p>
-            <p class="muted" style="margin-top: 0.55rem;">A lightweight SoundSource alternative for people who want precision without subscription lock-in.</p>
+    <a class="skip-link" href="#guide">Skip to guide</a>
+    <header class="wrap topbar">
+        <a class="brand" href="./"><span class="brand-mark">S</span><span>Speakerr</span></a>
+        <nav aria-label="Primary navigation">
+            <a href="#guide">Guide</a>
+            <a href="#calibrate">Calibrate</a>
+            <a class="hide-small" href="#tuning">Tuning</a>
+            <a href="https://github.com/brimell/speakerr">GitHub ↗</a>
+        </nav>
+    </header>
 
-            <div class="badges">
-                <img alt="GitHub release" src="https://img.shields.io/github/v/release/brimell/SoundMax?include_prereleases&style=flat-square">
-                <img alt="License" src="https://img.shields.io/github/license/brimell/SoundMax?style=flat-square">
-                <img alt="macOS" src="https://img.shields.io/badge/macOS-13.0%2B-blue?style=flat-square">
-            </div>
-
-            <div class="cta">
-                <a class="btn btn-primary" href="https://github.com/brimell/SoundMax/releases">Download Latest Release</a>
-                <a class="btn btn-secondary" href="https://github.com/brimell/SoundMax">View Source on GitHub</a>
-            </div>
-        </header>
-
-        <section class="section" aria-labelledby="what-you-get">
-            <h2 class="section-title" id="what-you-get">Why speakerr</h2>
-            <div class="feature-grid">
-                <article class="feature-card">
-                    <h3>Expandable Parametric EQ</h3>
-                    <p>Start with 10 bands, then add or remove bands in Advanced Options for deeper tuning workflows.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>7 Filter Types Per Band</h3>
-                    <p>Peak, shelf, pass, notch, and band-pass modes are available for each band in the main UI.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>Response + Spectrum Views</h3>
-                    <p>See computed EQ response and live post-EQ spectrum activity while you tune, without extra plugins.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>Dual Bypass Controls</h3>
-                    <p>Toggle full audio processing or EQ filters only for quick A/B checks that preserve gain staging.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>Per-Device Profiles</h3>
-                    <p>Save once per output device, then auto-restore and auto-save as you switch hardware.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>Proper Gain Staging</h3>
-                    <p>Separate preamp and output gain with a limiter stage and split clip meters for confidence.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>Auto-Stop EQ Clipping</h3>
-                    <p>Optional safety mode automatically trims headroom when the EQ stage clips during aggressive boosts.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>HDMI Volume Support</h3>
-                    <p>Software volume for HDMI and DisplayPort outputs where macOS disables hardware control.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>AutoEQ Built In + Import</h3>
-                    <p>Browse AutoEQ in-app or import ParametricEQ/GraphicEQ text files directly for fast headphone correction.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>Shortcut Target Sets</h3>
-                    <p>Use Control+Option+Command+O to switch outputs, and choose exactly which devices are in the cycle list.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>Latency &amp; Buffer Controls</h3>
-                    <p>Tune I/O buffer size, ring buffer capacity, and target queue depth to balance audio latency against stability on your specific hardware.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>Undo / Redo + A/B Compare</h3>
-                    <p>Full undo/redo history for EQ changes, plus two compare snapshot slots to instantly flip between different tunings.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>Settings Backup</h3>
-                    <p>Export all settings, custom presets, and device profiles to a JSON file and import them on any machine.</p>
-                </article>
+    <main class="wrap">
+        <section class="hero" aria-labelledby="page-title">
+            <span class="eyebrow">The getting-started guide</span>
+            <h1 id="page-title">Two speakers.<br><em>One listening space.</em></h1>
+            <p>Speakerr turns two separate Mac audio outputs into a synchronized stereo pair. Follow this guide to route your system audio, measure speaker timing, and start playback with confidence.</p>
+            <div class="actions">
+                <a class="button primary" href="#guide">Start the tutorial <span aria-hidden="true">↓</span></a>
+                <a class="button secondary" href="https://github.com/brimell/speakerr/releases">Download for macOS ↗</a>
             </div>
         </section>
 
-        <section class="section" aria-labelledby="latency">
-            <h2 class="section-title" id="latency">Latency &amp; Buffer Controls</h2>
-            <p class="muted" style="margin-bottom: 1rem;">speakerr uses a three-stage buffering pipeline. Tune it to match your hardware.</p>
-            <div class="feature-grid">
-                <article class="feature-card">
-                    <h3>I/O Buffer (64–4096 frames)</h3>
-                    <p>Controls how often audio is processed per hardware callback. Lower values reduce latency but increase CPU load. 256 frames is a good starting point for most systems.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>Ring Capacity (1×–16×)</h3>
-                    <p>Total internal buffer space as a multiple of the I/O buffer. Higher values absorb timing differences between input and output and prevent dropouts when devices drift.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>Target Queue (1×–ring capacity)</h3>
-                    <p>Keeps the ring buffer near a set depth by trimming older frames. Lower values mean more aggressive trimming — less latency but higher dropout risk.</p>
-                </article>
+        <section class="section" id="guide" aria-labelledby="quick-start-title">
+            <div class="section-heading">
+                <div><p class="kicker">Quick start · about 5 minutes</p><h2 id="quick-start-title">From download to playback.</h2></div>
+                <p>There are four things to do before you press play. The app keeps the order visible, so you always know what comes next.</p>
             </div>
-            <div style="margin-top: 1rem; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-md);">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Profile</th>
-                            <th>I/O Buffer</th>
-                            <th>Ring Capacity</th>
-                            <th>Target Queue</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><strong>Balanced (default)</strong></td>
-                            <td>256 frames</td>
-                            <td>4×</td>
-                            <td>2×</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Low Latency</strong></td>
-                            <td>64–128 frames</td>
-                            <td>2–4×</td>
-                            <td>1–2×</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Maximum Stability</strong></td>
-                            <td>512–1024 frames</td>
-                            <td>6–8×</td>
-                            <td>3–4×</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <p class="muted" style="margin-top: 0.75rem; font-size: 0.9rem;">HDMI and Bluetooth outputs usually need higher buffer values. Changing any setting briefly restarts the audio engine.</p>
-        </section>
-
-        <section class="section" aria-labelledby="screenshots">
-            <h2 class="section-title" id="screenshots">See It In Action</h2>
-            <div class="screens">
-                <figure>
-                    <img src="Screenshot%202026-04-17%20at%2020.26.21.png" alt="speakerr screenshot showing the tray interface">
-                    <figcaption>Tray Menu</figcaption>
-                </figure>
-                <figure>
-                    <img src="Screenshot%202026-04-17%20at%2020.26.42.png" alt="speakerr screenshot showing all controls">
-                    <figcaption>Main Menu</figcaption>
-                </figure>
-            </div>
-        </section>
-
-        <section class="section" aria-labelledby="comparison">
-            <h2 class="section-title" id="comparison">speakerr vs Alternatives</h2>
-            <div class="comparison-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Feature</th>
-                            <th>speakerr</th>
-                            <th>SoundSource</th>
-                            <th>eqMac</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>Price</td>
-                            <td class="good">Free</td>
-                            <td>$39</td>
-                            <td>Free / $34 Pro</td>
-                        </tr>
-                        <tr>
-                            <td>10-band parametric control</td>
-                            <td class="good">Yes</td>
-                            <td class="good">Yes</td>
-                            <td class="good">Yes</td>
-                        </tr>
-                        <tr>
-                            <td>Auto profile restore + save</td>
-                            <td class="good">Yes</td>
-                            <td>Limited</td>
-                            <td>Limited</td>
-                        </tr>
-                        <tr>
-                            <td>AutoEQ headphone import</td>
-                            <td class="good">Yes (150+)</td>
-                            <td class="bad">No</td>
-                            <td class="good">Yes</td>
-                        </tr>
-                        <tr>
-                            <td>HDMI software volume</td>
-                            <td class="good">Yes</td>
-                            <td class="good">Yes</td>
-                            <td class="good">Yes</td>
-                        </tr>
-                        <tr>
-                            <td>Open-source codebase</td>
-                            <td class="good">Yes</td>
-                            <td class="bad">No</td>
-                            <td class="good">Yes</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <section class="section" aria-labelledby="quick-start">
-            <h2 class="section-title" id="quick-start">Quick Start</h2>
-            <p class="muted">Get system-wide EQ running in under two minutes.</p>
             <div class="steps">
-                <article class="step">
-                    <p class="step-index">1</p>
-                    <h3>Install BlackHole</h3>
-                    <p>Install the virtual audio driver used for safe system-wide routing.</p>
-                </article>
-                <article class="step">
-                    <p class="step-index">2</p>
-                    <h3>Download speakerr</h3>
-                    <p>Grab the latest DMG from GitHub Releases and move it to Applications.</p>
-                </article>
-                <article class="step">
-                    <p class="step-index">3</p>
-                    <h3>Set System Output</h3>
-                    <p>Choose BlackHole 2ch in macOS Sound settings so all apps route through it.</p>
-                </article>
-                <article class="step">
-                    <p class="step-index">4</p>
-                    <h3>Select Real Output</h3>
-                    <p>In speakerr, pick your speakers or headphones and click Start.</p>
-                </article>
+                <article class="step"><span class="step-number">01</span><h3>Install the audio bridge</h3><p>Install BlackHole 2ch, the free virtual input that lets Speakerr receive audio from every Mac app.</p></article>
+                <article class="step"><span class="step-number">02</span><h3>Choose your outputs</h3><p>Open Speakerr from the menu bar and select exactly two connected speakers.</p></article>
+                <article class="step"><span class="step-number">03</span><h3>Calibrate in position</h3><p>Place your Mac where you listen. Speakerr measures each speaker and compensates for the timing difference.</p></article>
+                <article class="step"><span class="step-number">04</span><h3>Start the session</h3><p>Choose the synchronized group as your output, start playback, and enjoy the same signal from both speakers.</p></article>
             </div>
-            <pre class="code">brew install blackhole-2ch</pre>
+            <div class="note"><span aria-hidden="true">●</span><span><strong>Before you begin:</strong> use macOS 15 or later on Apple Silicon. Have both speakers connected, and keep the Mac near your normal listening position.</span></div>
         </section>
 
-        <footer>
-            <p>Built with SwiftUI and Core Audio.</p>
-            <p>
-                <a href="https://github.com/brimell/SoundMax">GitHub</a>
-                |
-                <a href="https://github.com/brimell/SoundMax/issues">Report an issue</a>
-                |
-                MIT License
-            </p>
-        </footer>
+        <section class="section" aria-labelledby="signal-title">
+            <div class="section-heading">
+                <div><p class="kicker">How it works</p><h2 id="signal-title">A clean signal path.</h2></div>
+                <p>Speakerr keeps system audio and calibration separate: the microphone is used briefly to measure timing, not to record ordinary playback.</p>
+            </div>
+            <div class="flow" aria-label="Audio signal path">
+                <div class="flow-node"><strong>Your apps</strong><span>Music · video · calls</span></div><span class="arrow" aria-hidden="true">→</span>
+                <div class="flow-node"><strong>BlackHole 2ch</strong><span>Virtual system input</span></div><span class="arrow" aria-hidden="true">→</span>
+                <div class="flow-node"><strong>Speakerr</strong><span>Sync · route · play</span></div>
+            </div>
+        </section>
+
+        <section class="section" id="install" aria-labelledby="install-title">
+            <div class="section-heading"><div><p class="kicker">Step 01 · installation</p><h2 id="install-title">Install the pieces.</h2></div><p>BlackHole is required for programme audio. Speakerr uses it as the input, then sends processed audio to your real outputs.</p></div>
+            <div class="tutorial">
+                <article class="card"><span class="tag">01 / BlackHole</span><h3>Install the virtual audio driver</h3><ol><li>Install with Homebrew:</li><li><code>brew install blackhole-2ch</code></li><li>Or use the <a href="https://github.com/ExistentialAudio/BlackHole/releases">BlackHole release installer ↗</a>.</li></ol></article>
+                <article class="card"><span class="tag">02 / Speakerr</span><h3>Install the app</h3><ol><li>Download the latest DMG from <a href="https://github.com/brimell/speakerr/releases">GitHub Releases ↗</a>.</li><li>Open the DMG and drag Speakerr to <strong>Applications</strong>.</li><li>If macOS asks, choose <strong>Open</strong> from the right-click menu.</li></ol></article>
+                <article class="card"><span class="tag">03 / macOS audio</span><h3>Route your system audio</h3><ol><li>Open <strong>System Settings → Sound → Output</strong>.</li><li>Select <strong>BlackHole 2ch</strong>.</li><li>Keep this setting while Speakerr is playing. Your normal apps will now feed the virtual input.</li></ol></article>
+                <article class="card"><span class="tag">04 / permission</span><h3>Allow microphone access</h3><p>macOS classifies audio-input access as microphone access. Select <strong>Allow</strong> when prompted. Speakerr needs it for the calibration measurement only.</p><div class="note"><span aria-hidden="true">↗</span><span>Denied it earlier? Go to <strong>System Settings → Privacy &amp; Security → Microphone</strong> and enable Speakerr.</span></div></article>
+            </div>
+        </section>
+
+        <section class="section" id="calibrate" aria-labelledby="calibrate-title">
+            <div class="section-heading"><div><p class="kicker">Steps 02–03 · setup</p><h2 id="calibrate-title">Select, then align.</h2></div><p>The main window is organized around one reliable flow: Speakers → Calibration → Playback.</p></div>
+            <div class="tutorial">
+                <article class="card"><span class="tag">Speakers</span><h3>Select exactly two outputs</h3><ol><li>Click <strong>Choose Speakers…</strong> on first launch (or <strong>Change Speakers…</strong> later).</li><li>Check two connected output devices, such as two USB speakers or a built-in speaker and an interface.</li><li>Click <strong>Use Selected</strong>. Choose <strong>Stereo-preserving</strong> or <strong>Mono broadcast</strong> in Playback mode.</li></ol></article>
+                <article class="card"><span class="tag">Calibration</span><h3>Measure from your listening position</h3><ol><li>Put the Mac at ear height where you normally sit or stand.</li><li>Click <strong>Calibrate…</strong>, choose the microphone, and set a comfortable calibration volume.</li><li>Click <strong>Start Calibration</strong>. Stay still and quiet while Speakerr measures both speakers.</li><li>Wait for <strong>Speakers Aligned</strong>. The residual error shows the remaining timing difference.</li></ol></article>
+            </div>
+            <div class="quote"><p>“Keep the Mac near your normal listening position.”</p><cite>Calibration rule of thumb</cite></div>
+        </section>
+
+        <section class="section" id="tuning" aria-labelledby="tuning-title">
+            <div class="section-heading"><div><p class="kicker">Step 04 · everyday use</p><h2 id="tuning-title">Play, refine, repeat.</h2></div><p>Once your speakers are aligned, the menu-bar app keeps the session ready while you work in any audio application.</p></div>
+            <div class="tutorial">
+                <article class="card"><span class="tag">Playback</span><h3>Start and pause Speakerr</h3><p>In the <strong>Playback</strong> section, click <strong>Resume Speakerr</strong>. The status changes to Running when programme audio is attached. Use <strong>Pause Speakerr</strong> to stop processing without losing your speaker selection.</p></article>
+                <article class="card"><span class="tag">Routing modes</span><h3>Choose the right presentation</h3><p>Use <strong>Stereo-preserving</strong> when left/right imaging matters. Use <strong>Mono broadcast</strong> when both speakers should play the same content, such as announcements or a multi-room setup.</p></article>
+                <article class="card"><span class="tag">Recheck</span><h3>Keep alignment healthy</h3><p>Reconnects, sample-rate changes, and sleep can make calibration stale. Click <strong>Recheck</strong> after a change. If Speakerr reports drift, use <strong>Apply Correction</strong> or calibrate again.</p></article>
+                <article class="card"><span class="tag">Advanced</span><h3>Inspect timing details</h3><p>Expand <strong>Advanced</strong> to see manual, calibration, and dynamic delay for each speaker. Open <strong>Diagnostics…</strong> when troubleshooting device or stream issues.</p></article>
+            </div>
+        </section>
+
+        <section class="section" aria-labelledby="troubleshooting-title">
+            <div class="section-heading"><div><p class="kicker">If something sounds wrong</p><h2 id="troubleshooting-title">A short troubleshooting list.</h2></div><p>Most setup problems come from one of three connections: the virtual input, the selected outputs, or microphone permission.</p></div>
+            <div class="faq">
+                <details><summary>No sound from either speaker</summary><p>Confirm macOS Output is <strong>BlackHole 2ch</strong>, Speakerr shows two connected speakers, and Playback says Running. Then pause and resume the session.</p></details>
+                <details><summary>Only one speaker plays</summary><p>Open <strong>Change Speakers…</strong> and confirm both devices are still connected. USB, Bluetooth, and HDMI devices may disappear after sleep.</p></details>
+                <details><summary>Calibration cannot measure</summary><p>Move the Mac closer to the listening position, reduce background noise, and try again with a slightly higher calibration volume. Check microphone permission.</p></details>
+                <details><summary>Audio drifts after reconnecting</summary><p>Speakerr marks calibration stale after route changes. Click <strong>Recheck</strong>; if needed, run the full calibration again from your normal listening position.</p></details>
+            </div>
+            <div class="actions"><a class="button secondary" href="https://github.com/brimell/speakerr/issues">Open an issue ↗</a><a class="button secondary" href="https://github.com/brimell/speakerr/blob/main/USERGUIDE.md">Read the full user guide ↗</a></div>
+        </section>
     </main>
+
+    <footer>
+        <div class="wrap"><p><strong>Speakerr</strong> is free and open source, built with SwiftUI and Core Audio.</p><p><a href="https://github.com/brimell/speakerr">Source on GitHub</a> · <a href="https://github.com/brimell/speakerr/releases">Releases</a> · MIT License</p></div>
+    </footer>
 </body>
 </html>
