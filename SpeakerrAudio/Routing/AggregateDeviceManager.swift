@@ -73,7 +73,12 @@ public final class AggregateDeviceManager {
                 AudioHardwareDestroyAggregateDevice(aggregateID)
                 throw CoreAudioError("Verify aggregate subdevice order", status: kAudioHardwareNotRunningError)
             }
-            let driftReadback = composedSubdevices.dropFirst().allSatisfy { ($0["drift"] as? NSNumber)?.intValue == 1 }
+            let masterUID = outputs[0].id
+            let driftReadback = composedSubdevices.allSatisfy { sub in
+                guard let uid = sub["uid"] as? String else { return false }
+                let drift = (sub["drift"] as? NSNumber)?.intValue ?? 0
+                return uid == masterUID ? (drift == 0) : (drift == 1)
+            }
             guard driftReadback else {
                 AudioHardwareDestroyAggregateDevice(aggregateID)
                 throw CoreAudioError("Verify drift compensation", status: kAudioHardwareUnsupportedOperationError)

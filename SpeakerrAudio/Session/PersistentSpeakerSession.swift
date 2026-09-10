@@ -24,6 +24,9 @@ final class PersistentRenderState: @unchecked Sendable {
     let emissionSpeaker = Atomic<Int>(0)
     let emissionStartFrame = Atomic<Int64>(-1)
     let emissionHostTime = Atomic<UInt64>(0)
+    let renderOverloadCount = Atomic<UInt64>(0)
+    let maxRenderDurationNanos = Atomic<UInt64>(0)
+    let lastRenderDurationNanos = Atomic<UInt64>(0)
 
     private let sampleRate: Double
     private let chirp: [Float]
@@ -128,6 +131,7 @@ final class PersistentRenderState: @unchecked Sendable {
     }
 
     func render(timestamp: UnsafePointer<AudioTimeStamp>, ioData: UnsafeMutablePointer<AudioBufferList>, frameCount: UInt32) -> OSStatus {
+        let renderStart = AudioGetCurrentHostTime()
         guard frameCount <= Self.maximumFrames else { return record(kAudioUnitErr_TooManyFramesToProcess) }
         guard timestamp.pointee.mFlags.contains(.hostTimeValid) else { return record(kAudio_ParamError) }
         let count = Int(frameCount)
@@ -202,6 +206,19 @@ final class PersistentRenderState: @unchecked Sendable {
         framePosition = blockEnd
         renderedFrames.store(blockEnd, ordering: .releasing)
         callbackCount.wrappingAdd(1, ordering: .relaxed)
+        let renderEnd = AudioGetCurrentHostTime()
+        let renderNanos = AudioConvertHostTimeToNanos(renderEnd - renderStart)
+        lastRenderDurationNanos.store(renderNanos, ordering: .relaxed)
+        var prevMax = maxRenderDurationNanos.load(ordering: .relaxed)
+        while renderNanos > prevMax {
+            let (exchanged, original) = maxRenderDurationNanos.compareExchange(expected: prevMax, desired: renderNanos, ordering: .relaxed)
+            if exchanged { break }
+            prevMax = original
+        }
+        let budgetNanos = UInt64(Double(count) * 1_000_000_000.0 / sampleRate)
+        if renderNanos > budgetNanos {
+            renderOverloadCount.wrappingAdd(1, ordering: .relaxed)
+        }
         return noErr
     }
 
@@ -440,7 +457,21 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         _ = try stateMachine.handle(.beginCalibration)
         defer { resumeProgramme() }
 
-        let maximumDuration = max(30, Double(configuration.maximumPasses * configuration.eventsPerPass) * (reference.durationSeconds + configuration.maximumAcousticLatencySeconds + 0.25) + 10)
+        // Clean baseline initialization: temporarily zero automatic calibration and dynamic correction
+        for index in delayComponents.indices {
+            let saved = priorDelays[index]
+            try setDelayComponents(
+                index: index,
+                value: DelayComponents(
+                    manual: saved.manual,
+                    calibration: 0.0,
+                    dynamicCorrection: 0.0
+                )
+            )
+        }
+        calibrationLogger.notice("Calibration clean baseline initialized: priorDelays=\(priorDelays.map(\.calibration), privacy: .public) temporaryBaseline=\(self.delayComponents.map(\.calibration), privacy: .public)")
+
+        let maximumDuration = max(60, Double(configuration.maximumPasses * configuration.eventsPerPass) * (reference.durationSeconds + 1.5) + 30)
         let microphone = try ContinuousMicrophoneCapture(device: input, sampleRate: sampleRate, maximumDurationSeconds: maximumDuration)
         microphoneCapture = microphone
         try microphone.start()
@@ -537,19 +568,31 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             passes.append(pass0)
 
             guard pass0.canApplyCompensation else {
-                for index in priorDelays.indices { try setDelayComponents(index: index, value: priorDelays[index]) }
-                _ = try stateMachine.handle(.cancelCalibration(priorState))
-                return passes
+                for index in priorDelays.indices { try? setDelayComponents(index: index, value: priorDelays[index]) }
+                _ = try stateMachine.handle(.calibrationFailed("Pass 1 baseline rejected"))
+                calibrationLogger.notice("Calibration Pass 1 baseline rejected: restored priorDelays=\(priorDelays.map(\.calibration), privacy: .public)")
+                if let (speakerIndex, measurements) = pass0.measurementsBySpeaker.enumerated().first(where: { $0.element.filter(\.estimate.accepted).count < 1 }) {
+                    throw CalibrationSessionError.insufficientValidMeasurements(speaker: outputs[speakerIndex].name, valid: measurements.filter(\.estimate.accepted).count, required: 1)
+                } else {
+                    throw CalibrationSessionError.didNotConverge(residualMilliseconds: .infinity)
+                }
             }
 
-            // Calculate & apply baseline compensation
+            // Calculate & apply baseline compensation (absolute compensation calculated from clean baseline)
             let compensation = try AdaptiveCalibrationController.calculateBaselineCompensation(
                 speakerMeasurements: baselineMeasurements,
                 requiredAcceptedCount: 1
             )
             for index in compensation.delays.indices {
-                let old = priorDelays[index]
-                try setDelayComponents(index: index, value: DelayComponents(manual: old.manual, calibration: old.calibration + compensation.delays[index], dynamicCorrection: old.dynamicCorrection))
+                let saved = priorDelays[index]
+                try setDelayComponents(
+                    index: index,
+                    value: DelayComponents(
+                        manual: saved.manual,
+                        calibration: compensation.delays[index],
+                        dynamicCorrection: 0.0
+                    )
+                )
             }
             let maxBaselineDelay = compensation.delays.max() ?? 0
             progress?(.init(phase: .applyingCorrection(residualMilliseconds: maxBaselineDelay), progressFraction: 0.5, timeRemaining: singleMeasurementDuration * Double(outputs.count)))
@@ -614,20 +657,39 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                     )
                     guard !offending.isEmpty else { break }
 
-                    // Compute current reference arrival (max of accepted measurements)
-                    let currentAccepted = verificationMeasurements.compactMap { $0.last }.filter { $0.estimate.accepted }
-                    let targetArrival = currentAccepted.map(\.acousticLatencyMilliseconds).max()
+                    // Derived target arrival from accepted measurements only
+                    let targetArrival = AdaptiveCalibrationController.verificationTargetArrival(
+                        verificationMeasurements: verificationMeasurements,
+                        minimumAcceptedCount: min(2, outputs.count)
+                    ) ?? AdaptiveCalibrationController.verificationTargetArrival(
+                        verificationMeasurements: verificationMeasurements,
+                        minimumAcceptedCount: 1
+                    )
 
                     for speaker in offending {
                         try Task.checkCancellation()
-                        // If we have an arrival and a target, adjust compensation delta
-                        if let targetArrival, let currentArrival = verificationMeasurements[speaker].last?.acousticLatencyMilliseconds, currentArrival.isFinite {
-                            let delta = targetArrival - currentArrival
-                            if abs(delta) > 0.1 && abs(delta) < 500 {
-                                let old = delayComponents[speaker]
-                                try setDelayComponents(index: speaker, value: DelayComponents(manual: old.manual, calibration: max(0, old.calibration + delta), dynamicCorrection: old.dynamicCorrection))
-                            }
+                        let lastMeasurement = verificationMeasurements[speaker].last
+                        let delayBefore = delayComponents[speaker].calibration
+                        let adjustment = AdaptiveCalibrationController.calculateVerificationRetryAdjustment(
+                            lastMeasurement: lastMeasurement,
+                            targetArrivalMilliseconds: targetArrival,
+                            currentCalibrationDelayMilliseconds: delayBefore,
+                            maximumSanityDeltaMilliseconds: AdaptiveCalibrationController.defaultSanityBoundDeltaMilliseconds
+                        )
+                        var delayChanged = false
+                        if adjustment.shouldAdjustDelay {
+                            let saved = priorDelays[speaker]
+                            try setDelayComponents(
+                                index: speaker,
+                                value: DelayComponents(
+                                    manual: saved.manual,
+                                    calibration: adjustment.newCalibrationDelayMilliseconds,
+                                    dynamicCorrection: 0.0
+                                )
+                            )
+                            delayChanged = true
                         }
+                        calibrationLogger.notice("Calibration verification retry prep speaker=\(self.outputs[speaker].name, privacy: .public) accepted=\(lastMeasurement?.estimate.accepted ?? false, privacy: .public) candidateLatency=\(lastMeasurement?.acousticLatencyMilliseconds ?? -1, privacy: .public) targetArrival=\(targetArrival ?? -1, privacy: .public) currentRouteDelay=\(delayBefore, privacy: .public) delayChanged=\(delayChanged, privacy: .public) appliedDelta=\(adjustment.deltaMilliseconds, privacy: .public) reason=\(adjustment.reason, privacy: .public)")
 
                         // Remeasure only this speaker
                         do {
@@ -684,11 +746,21 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             )
             passes.append(pass1)
 
-            guard let finalSpread = verifiedSpread, finalSpread <= configuration.targetResidualMilliseconds, pass1.canApplyCompensation else {
+            let allLatestAccepted = verificationMeasurements.allSatisfy { list in
+                guard let last = list.last else { return false }
+                return last.estimate.accepted
+            }
+
+            guard allLatestAccepted,
+                  let finalSpread = verifiedSpread,
+                  finalSpread.isFinite,
+                  finalSpread <= configuration.targetResidualMilliseconds,
+                  pass1.canApplyCompensation else {
                 // Restore prior delays on failure to converge
                 for index in priorDelays.indices { try? setDelayComponents(index: index, value: priorDelays[index]) }
                 let residual = verifiedSpread ?? .infinity
                 _ = try stateMachine.handle(.calibrationFailed("residual \(residual) ms"))
+                calibrationLogger.notice("Calibration non-converged or unaccepted: restored priorDelays=\(priorDelays.map(\.calibration), privacy: .public) residual=\(residual, privacy: .public)")
                 throw CalibrationSessionError.didNotConverge(residualMilliseconds: residual)
             }
 
@@ -711,17 +783,20 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
 
             let timingSummary = timingCollector.finish()
             calibrationLogger.notice("\(timingSummary.formattedSummary, privacy: .public)")
+            calibrationLogger.notice("Calibration finished successfully: finalDelays=\(self.delayComponents.map(\.calibration), privacy: .public) residualSpread=\(finalSpread, privacy: .public) ms renderMaxNanos=\(renderState.maxRenderDurationNanos.load(ordering: .relaxed), privacy: .public) renderOverloads=\(renderState.renderOverloadCount.load(ordering: .relaxed), privacy: .public)")
 
             resumeProgramme()
             return passes
         } catch is CancellationError {
             for index in priorDelays.indices { try? setDelayComponents(index: index, value: priorDelays[index]) }
             if case .calibrating = stateMachine.state { _ = try? stateMachine.handle(.cancelCalibration(priorState)) }
+            calibrationLogger.notice("Calibration cancelled: restored priorDelays=\(priorDelays.map(\.calibration), privacy: .public)")
             resumeProgramme()
             throw CancellationError()
         } catch {
             for index in priorDelays.indices { try? setDelayComponents(index: index, value: priorDelays[index]) }
             if case .calibrating = stateMachine.state { _ = try? stateMachine.handle(.calibrationFailed(error.localizedDescription)) }
+            calibrationLogger.notice("Calibration failed: restored priorDelays=\(priorDelays.map(\.calibration), privacy: .public) error=\(error.localizedDescription, privacy: .public)")
             resumeProgramme()
             throw error
         }
@@ -1057,10 +1132,19 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         let startFrame = renderState.emissionStartFrame.load(ordering: .acquiring)
         calibrationLogger.notice("Calibration emission scheduled speakerIndex=\(speaker, privacy: .public) speakerName=\(self.outputs[speaker].name, privacy: .public) actualAggregateChannelAssignment=\(renderState.assignmentDescription(for: speaker), privacy: .public) emissionRequestID=\(request, privacy: .public) emissionStartFrame=\(startFrame, privacy: .public) emissionHostTime=\(host, privacy: .public)")
 
+        let activeRouteDelaySeconds = max(0, delayComponents[speaker].effectiveMilliseconds / 1000.0)
+        let maxRawLatency = max(configuration.maximumAcousticLatencySeconds, outputs.count > 2 ? 0.700 : 0.400)
         let durationSeconds = Double(reference.samples.count) / sampleRate
         let acousticTailSeconds = 0.05
-        let safetyMarginSeconds = 0.025
-        let requiredSeconds = durationSeconds + configuration.maximumAcousticLatencySeconds + acousticTailSeconds + safetyMarginSeconds
+        let safetyMarginSeconds = 0.05
+        let requiredSeconds = AdaptiveCalibrationController.requiredCaptureDurationSeconds(
+            rawLatencySeconds: maxRawLatency,
+            activeRouteDelaySeconds: activeRouteDelaySeconds,
+            probeDurationSeconds: durationSeconds,
+            acousticTailSeconds: acousticTailSeconds,
+            safetyMarginSeconds: safetyMarginSeconds,
+            hardMaximumSeconds: 2.5
+        )
         let hostNanos = AudioConvertHostTimeToNanos(host)
         let targetHostNanos = hostNanos + UInt64(requiredSeconds * 1_000_000_000)
         let currentNanos = AudioConvertHostTimeToNanos(AudioGetCurrentHostTime())
@@ -1072,7 +1156,14 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         let scheduledInput = try captured.sampleIndex(atHostTime: host)
         let preSearch = Int((0.005 * sampleRate).rounded())
         let sliceStart = max(0, Int(floor(scheduledInput)) - preSearch)
-        let searchEnd = min(captured.samples.count, Int(ceil(scheduledInput + (configuration.maximumAcousticLatencySeconds + durationSeconds) * sampleRate)))
+
+        let maxArrivalSamples = AdaptiveCalibrationController.searchWindowExtentSamples(
+            rawLatencySeconds: maxRawLatency,
+            activeRouteDelaySeconds: activeRouteDelaySeconds,
+            sampleRate: sampleRate,
+            hardMaximumSeconds: 2.5
+        )
+        let searchEnd = min(captured.samples.count, Int(ceil(scheduledInput)) + maxArrivalSamples)
         let sliceEnd = min(captured.samples.count, searchEnd + reference.samples.count)
         guard sliceEnd - sliceStart >= reference.samples.count else { throw DelayEstimatorError.insufficientRecording }
         let recording = Array(captured.samples[sliceStart..<sliceEnd])
@@ -1132,7 +1223,19 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             )
         }
 
-        calibrationLogger.notice("Calibration measurement result speakerIndex=\(speaker, privacy: .public) speakerName=\(self.outputs[speaker].name, privacy: .public) detectedLatencyMilliseconds=\(latency, privacy: .public) peak=\(estimate.peakValue, privacy: .public) prominence=\(estimate.peakProminence, privacy: .public) confidence=\(estimate.confidence, privacy: .public) accepted=\(estimate.accepted, privacy: .public) failureReason=\(estimate.rejectionReason?.rawValue ?? "none", privacy: .public)")
+        var aLat: Double? = nil
+        var bLat: Double? = nil
+        var abDiff: Double? = nil
+        if let correlationDiagnostics {
+            let origin = Double(sliceStart) - scheduledInput
+            let aLatency = (origin + correlationDiagnostics.aBestStartOffset) * 1_000.0 / sampleRate
+            let bLatency = (origin + correlationDiagnostics.bBestArrivalOffset) * 1_000.0 / sampleRate
+            aLat = aLatency
+            bLat = bLatency
+            abDiff = bLatency - aLatency
+        }
+
+        calibrationLogger.notice("Calibration measurement result speakerIndex=\(speaker, privacy: .public) speakerName=\(self.outputs[speaker].name, privacy: .public) detectedLatencyMilliseconds=\(latency, privacy: .public) aLatencyMilliseconds=\(aLat ?? -1, privacy: .public) bLatencyMilliseconds=\(bLat ?? -1, privacy: .public) abDifferenceMilliseconds=\(abDiff ?? -1, privacy: .public) currentRouteDelayMilliseconds=\(self.delayComponents[speaker].effectiveMilliseconds, privacy: .public) searchWindowStart=\(lower, privacy: .public) searchWindowEnd=\(upper, privacy: .public) snapshotDurationSeconds=\(requiredSeconds, privacy: .public) peak=\(estimate.peakValue, privacy: .public) prominence=\(estimate.peakProminence, privacy: .public) confidence=\(estimate.confidence, privacy: .public) accepted=\(estimate.accepted, privacy: .public) failureReason=\(estimate.rejectionReason?.rawValue ?? "none", privacy: .public)")
         emissionSequence += 1
         return AcousticMeasurement(emission: CalibrationEmission(pass: pass, sequence: emissionSequence, speakerIndex: speaker, scheduledOutputFrame: startFrame, scheduledOutputHostTime: host), arrivalHostTime: arrivalHost, acousticLatencyMilliseconds: latency, estimate: estimate)
     }

@@ -179,6 +179,7 @@ public struct AdaptiveCalibrationController: Sendable {
     public static let strongConsistencyToleranceMilliseconds: Double = 0.25
     public static let defaultClusterToleranceMilliseconds: Double = 3.0
     public static let defaultTargetResidualMilliseconds: Double = 2.0
+    public static let defaultSanityBoundDeltaMilliseconds: Double = 50.0
 
     public static func isFastAcceptable(
         _ measurement: AcousticMeasurement,
@@ -254,22 +255,18 @@ public struct AdaptiveCalibrationController: Sendable {
         if measurements.count == 1 {
             return !isFastAcceptable(measurements[0])
         }
-        if measurements.count == 2 {
-            let m0 = measurements[0]
-            let m1 = measurements[1]
-            if !m0.estimate.accepted && !m1.estimate.accepted { return true }
-            if m0.estimate.accepted && !m1.estimate.accepted {
-                return !isFastAcceptable(m0)
-            }
-            if !m0.estimate.accepted && m1.estimate.accepted {
-                return !isFastAcceptable(m1)
-            }
-            let diff = abs(m0.acousticLatencyMilliseconds - m1.acousticLatencyMilliseconds)
-            if diff > 1.5 { return true }
-            let stability = assessTemporalStability(measurements: measurements)
-            if case .monotonicDrift = stability { return true }
-            return false
+        let accepted = measurements.filter { $0.estimate.accepted }
+        if accepted.isEmpty {
+            return true
         }
+        if accepted.count == 1 {
+            return !isFastAcceptable(accepted[0])
+        }
+        let lats = accepted.map(\.acousticLatencyMilliseconds)
+        let diff = (lats.max() ?? 0) - (lats.min() ?? 0)
+        if diff > 1.5 { return true }
+        let stability = assessTemporalStability(measurements: measurements)
+        if case .monotonicDrift = stability { return true }
         return false
     }
 
@@ -299,8 +296,8 @@ public struct AdaptiveCalibrationController: Sendable {
         let lats = accepted.map(\.measurement.acousticLatencyMilliseconds)
         let minLat = lats.min()!
         let maxLat = lats.max()!
-        if maxLat - minLat <= targetSpreadMilliseconds && offending.isEmpty {
-            return []
+        if maxLat - minLat <= targetSpreadMilliseconds {
+            return offending.sorted()
         }
 
         let medianLat = (try? RobustMeasurementSummary(values: lats).medianMilliseconds) ?? (minLat + maxLat) / 2
@@ -347,8 +344,121 @@ public struct AdaptiveCalibrationController: Sendable {
         let latest = verificationMeasurements.compactMap { $0.last }
         guard latest.count == verificationMeasurements.count else { return nil }
         guard latest.allSatisfy({ $0.estimate.accepted }) else { return nil }
-        let lats = latest.map(\.acousticLatencyMilliseconds)
-        guard let minLat = lats.min(), let maxLat = lats.max() else { return nil }
+        let lats = latest.map(\.acousticLatencyMilliseconds).filter(\.isFinite)
+        guard lats.count == verificationMeasurements.count, let minLat = lats.min(), let maxLat = lats.max() else { return nil }
         return maxLat - minLat
+    }
+
+    public static func verificationTargetArrival(
+        verificationMeasurements: [[AcousticMeasurement]],
+        minimumAcceptedCount: Int = 1
+    ) -> Double? {
+        let accepted = verificationMeasurements.compactMap { $0.last }.filter { $0.estimate.accepted }
+        guard accepted.count >= minimumAcceptedCount else { return nil }
+        let lats = accepted.map(\.acousticLatencyMilliseconds).filter(\.isFinite)
+        guard !lats.isEmpty else { return nil }
+        return lats.max()
+    }
+
+    public struct VerificationRetryAdjustment: Sendable, Equatable {
+        public let shouldAdjustDelay: Bool
+        public let deltaMilliseconds: Double
+        public let newCalibrationDelayMilliseconds: Double
+        public let reason: String
+
+        public init(shouldAdjustDelay: Bool, deltaMilliseconds: Double, newCalibrationDelayMilliseconds: Double, reason: String) {
+            self.shouldAdjustDelay = shouldAdjustDelay
+            self.deltaMilliseconds = deltaMilliseconds
+            self.newCalibrationDelayMilliseconds = newCalibrationDelayMilliseconds
+            self.reason = reason
+        }
+    }
+
+    public static func calculateVerificationRetryAdjustment(
+        lastMeasurement: AcousticMeasurement?,
+        targetArrivalMilliseconds: Double?,
+        currentCalibrationDelayMilliseconds: Double,
+        maximumSanityDeltaMilliseconds: Double = defaultSanityBoundDeltaMilliseconds
+    ) -> VerificationRetryAdjustment {
+        guard let last = lastMeasurement else {
+            return VerificationRetryAdjustment(
+                shouldAdjustDelay: false,
+                deltaMilliseconds: 0.0,
+                newCalibrationDelayMilliseconds: currentCalibrationDelayMilliseconds,
+                reason: "No prior measurement"
+            )
+        }
+        guard last.estimate.accepted else {
+            return VerificationRetryAdjustment(
+                shouldAdjustDelay: false,
+                deltaMilliseconds: 0.0,
+                newCalibrationDelayMilliseconds: currentCalibrationDelayMilliseconds,
+                reason: "Measurement rejected (accepted == false); candidate latency \(last.acousticLatencyMilliseconds) ms ignored"
+            )
+        }
+        guard let targetArrival = targetArrivalMilliseconds, targetArrival.isFinite else {
+            return VerificationRetryAdjustment(
+                shouldAdjustDelay: false,
+                deltaMilliseconds: 0.0,
+                newCalibrationDelayMilliseconds: currentCalibrationDelayMilliseconds,
+                reason: "No valid target arrival"
+            )
+        }
+        let currentArrival = last.acousticLatencyMilliseconds
+        guard currentArrival.isFinite else {
+            return VerificationRetryAdjustment(
+                shouldAdjustDelay: false,
+                deltaMilliseconds: 0.0,
+                newCalibrationDelayMilliseconds: currentCalibrationDelayMilliseconds,
+                reason: "Measurement arrival is not finite"
+            )
+        }
+        let delta = targetArrival - currentArrival
+        if abs(delta) > maximumSanityDeltaMilliseconds {
+            return VerificationRetryAdjustment(
+                shouldAdjustDelay: false,
+                deltaMilliseconds: delta,
+                newCalibrationDelayMilliseconds: currentCalibrationDelayMilliseconds,
+                reason: "Correction delta \(delta) ms exceeds sanity bound \(maximumSanityDeltaMilliseconds) ms"
+            )
+        }
+        if abs(delta) <= 0.1 {
+            return VerificationRetryAdjustment(
+                shouldAdjustDelay: false,
+                deltaMilliseconds: delta,
+                newCalibrationDelayMilliseconds: currentCalibrationDelayMilliseconds,
+                reason: "Correction delta \(delta) ms below threshold 0.1 ms"
+            )
+        }
+        let newDelay = max(0.0, currentCalibrationDelayMilliseconds + delta)
+        return VerificationRetryAdjustment(
+            shouldAdjustDelay: true,
+            deltaMilliseconds: delta,
+            newCalibrationDelayMilliseconds: newDelay,
+            reason: "Adjusting delay by \(delta) ms (target \(targetArrival) ms - current \(currentArrival) ms)"
+        )
+    }
+
+    public static func requiredCaptureDurationSeconds(
+        rawLatencySeconds: Double,
+        activeRouteDelaySeconds: Double,
+        probeDurationSeconds: Double,
+        acousticTailSeconds: Double = 0.05,
+        safetyMarginSeconds: Double = 0.05,
+        hardMaximumSeconds: Double = 2.5
+    ) -> Double {
+        let expectedArrival = min(hardMaximumSeconds - 0.6, max(0, rawLatencySeconds) + max(0, activeRouteDelaySeconds))
+        let total = expectedArrival + probeDurationSeconds + acousticTailSeconds + safetyMarginSeconds
+        return min(hardMaximumSeconds, total)
+    }
+
+    public static func searchWindowExtentSamples(
+        rawLatencySeconds: Double,
+        activeRouteDelaySeconds: Double,
+        sampleRate: Double,
+        hardMaximumSeconds: Double = 2.5
+    ) -> Int {
+        let expectedArrival = min(hardMaximumSeconds - 0.6, max(0, rawLatencySeconds) + max(0, activeRouteDelaySeconds))
+        return Int(ceil((expectedArrival + 0.02) * sampleRate))
     }
 }

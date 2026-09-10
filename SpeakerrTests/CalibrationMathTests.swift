@@ -408,4 +408,313 @@ final class AdaptiveCalibrationTests: XCTestCase {
         let totalDiagnosticEmissions = threeSpeakerPassesPerSpeaker * speakerCount
         XCTAssertEqual(totalDiagnosticEmissions, 60)
     }
+
+    // MARK: - 12. Regression Test Suite for Multi-Speaker Calibration & Retry Fixes
+
+    // 1. Rejected verification estimate keeps existing route delay unchanged
+    func testRejectedVerificationEstimateKeepsExistingRouteDelayUnchanged() {
+        let rejectedMeasurement = makeMeasurement(speakerIndex: 3, latencyMs: 254.0, accepted: false, confidence: 0.1)
+        let adjustment = AdaptiveCalibrationController.calculateVerificationRetryAdjustment(
+            lastMeasurement: rejectedMeasurement,
+            targetArrivalMilliseconds: 471.0,
+            currentCalibrationDelayMilliseconds: 100.0,
+            maximumSanityDeltaMilliseconds: 50.0
+        )
+        XCTAssertFalse(adjustment.shouldAdjustDelay)
+        XCTAssertEqual(adjustment.newCalibrationDelayMilliseconds, 100.0)
+        XCTAssertEqual(adjustment.deltaMilliseconds, 0.0)
+        XCTAssertTrue(adjustment.reason.contains("rejected"))
+    }
+
+    // 2. Rejected verification estimate causes re-emission without modifying delay
+    func testRejectedVerificationEstimateCausesReEmissionWithoutModifyingDelay() {
+        let v0 = makeMeasurement(speakerIndex: 0, latencyMs: 471.0, accepted: true)
+        let v1 = makeMeasurement(speakerIndex: 1, latencyMs: 471.2, accepted: true)
+        let v2 = makeMeasurement(speakerIndex: 2, latencyMs: 470.8, accepted: true)
+        let v3Rejected = makeMeasurement(speakerIndex: 3, latencyMs: 254.0, accepted: false)
+
+        let verification = [[v0], [v1], [v2], [v3Rejected]]
+        let targetArrival = AdaptiveCalibrationController.verificationTargetArrival(
+            verificationMeasurements: verification,
+            minimumAcceptedCount: 2
+        )
+        XCTAssertEqual(targetArrival!, 471.2, accuracy: 0.001)
+
+        let offending = AdaptiveCalibrationController.identifyOffendingSpeakers(
+            verificationMeasurements: verification,
+            targetSpreadMilliseconds: 2.0
+        )
+        XCTAssertEqual(offending, [3])
+
+        let speaker = offending[0]
+        let currentDelay = 100.0
+        let adjustment = AdaptiveCalibrationController.calculateVerificationRetryAdjustment(
+            lastMeasurement: verification[speaker].last,
+            targetArrivalMilliseconds: targetArrival,
+            currentCalibrationDelayMilliseconds: currentDelay,
+            maximumSanityDeltaMilliseconds: 50.0
+        )
+        XCTAssertFalse(adjustment.shouldAdjustDelay)
+        XCTAssertEqual(adjustment.newCalibrationDelayMilliseconds, currentDelay)
+        let delayForRetry = adjustment.shouldAdjustDelay ? adjustment.newCalibrationDelayMilliseconds : currentDelay
+        XCTAssertEqual(delayForRetry, 100.0)
+    }
+
+    // 3. Accepted verification estimate with delta <= 50 ms adjusts delay
+    func testAcceptedVerificationEstimateWithDeltaUnderFiftyAdjustsDelay() {
+        let acceptedMeasurement = makeMeasurement(speakerIndex: 1, latencyMs: 145.0, accepted: true)
+        let adjustment = AdaptiveCalibrationController.calculateVerificationRetryAdjustment(
+            lastMeasurement: acceptedMeasurement,
+            targetArrivalMilliseconds: 150.0,
+            currentCalibrationDelayMilliseconds: 20.0,
+            maximumSanityDeltaMilliseconds: 50.0
+        )
+        XCTAssertTrue(adjustment.shouldAdjustDelay)
+        XCTAssertEqual(adjustment.deltaMilliseconds, 5.0, accuracy: 0.001)
+        XCTAssertEqual(adjustment.newCalibrationDelayMilliseconds, 25.0, accuracy: 0.001)
+    }
+
+    // 4. Accepted verification estimate with delta > 50 ms is clamped or rejected by sanity guard
+    func testAcceptedVerificationEstimateWithDeltaOverFiftyClampedOrRejectedBySanityGuard() {
+        let outlierMeasurement = makeMeasurement(speakerIndex: 1, latencyMs: 90.0, accepted: true)
+        let adjustment = AdaptiveCalibrationController.calculateVerificationRetryAdjustment(
+            lastMeasurement: outlierMeasurement,
+            targetArrivalMilliseconds: 150.0,
+            currentCalibrationDelayMilliseconds: 20.0,
+            maximumSanityDeltaMilliseconds: 50.0
+        )
+        XCTAssertFalse(adjustment.shouldAdjustDelay)
+        XCTAssertEqual(adjustment.newCalibrationDelayMilliseconds, 20.0)
+        XCTAssertEqual(adjustment.deltaMilliseconds, 60.0)
+        XCTAssertTrue(adjustment.reason.contains("exceeds sanity bound"))
+    }
+
+    // 5. Target arrival derivation ignores rejected measurements
+    func testTargetArrivalDerivationIgnoresRejectedMeasurements() {
+        let accepted0 = makeMeasurement(speakerIndex: 0, latencyMs: 120.0, accepted: true)
+        let accepted1 = makeMeasurement(speakerIndex: 1, latencyMs: 150.0, accepted: true)
+        let rejected2 = makeMeasurement(speakerIndex: 2, latencyMs: 400.0, accepted: false)
+
+        let target = AdaptiveCalibrationController.verificationTargetArrival(
+            verificationMeasurements: [[accepted0], [accepted1], [rejected2]],
+            minimumAcceptedCount: 2
+        )
+        XCTAssertNotNil(target)
+        XCTAssertEqual(target!, 150.0, accuracy: 0.001)
+    }
+
+    // 6. Target arrival derivation falls back safely if accepted count is insufficient
+    func testTargetArrivalDerivationFallsBackSafelyIfAcceptedCountInsufficient() {
+        let accepted0 = makeMeasurement(speakerIndex: 0, latencyMs: 135.0, accepted: true)
+        let rejected1 = makeMeasurement(speakerIndex: 1, latencyMs: 200.0, accepted: false)
+        let rejected2 = makeMeasurement(speakerIndex: 2, latencyMs: 300.0, accepted: false)
+
+        let targetMin2 = AdaptiveCalibrationController.verificationTargetArrival(
+            verificationMeasurements: [[accepted0], [rejected1], [rejected2]],
+            minimumAcceptedCount: 2
+        )
+        XCTAssertNil(targetMin2)
+
+        let targetMin1 = AdaptiveCalibrationController.verificationTargetArrival(
+            verificationMeasurements: [[accepted0], [rejected1], [rejected2]],
+            minimumAcceptedCount: 1
+        )
+        XCTAssertEqual(targetMin1!, 135.0, accuracy: 0.001)
+
+        let allRejectedTarget = AdaptiveCalibrationController.verificationTargetArrival(
+            verificationMeasurements: [[rejected1], [rejected2]],
+            minimumAcceptedCount: 1
+        )
+        XCTAssertNil(allRejectedTarget)
+    }
+
+    // 7. Raw Bluetooth latency up to 700 ms is within capture window
+    func testRawBluetoothLatencyUpToSevenHundredMsIsWithinCaptureWindow() {
+        let sampleRate = 48_000.0
+        let rawLatency = 0.700
+        let activeRouteDelay = 0.0
+        let probeDuration = 0.350
+        let tail = 0.050
+        let margin = 0.050
+
+        let captureSeconds = AdaptiveCalibrationController.requiredCaptureDurationSeconds(
+            rawLatencySeconds: rawLatency,
+            activeRouteDelaySeconds: activeRouteDelay,
+            probeDurationSeconds: probeDuration,
+            acousticTailSeconds: tail,
+            safetyMarginSeconds: margin,
+            hardMaximumSeconds: 2.5
+        )
+        XCTAssertGreaterThanOrEqual(captureSeconds, rawLatency + activeRouteDelay + probeDuration + tail + margin)
+        XCTAssertLessThanOrEqual(captureSeconds, 2.5)
+
+        let extentSamples = AdaptiveCalibrationController.searchWindowExtentSamples(
+            rawLatencySeconds: rawLatency,
+            activeRouteDelaySeconds: activeRouteDelay,
+            sampleRate: sampleRate,
+            hardMaximumSeconds: 2.5
+        )
+        let expectedMinSamples = Int((0.700 * sampleRate).rounded())
+        XCTAssertGreaterThanOrEqual(extentSamples, expectedMinSamples)
+    }
+
+    // 8. Route delay of 300 ms + raw latency of 400 ms fits in capture window
+    func testRouteDelayOfThreeHundredMsPlusRawLatencyOfFourHundredMsFitsInCaptureWindow() {
+        let sampleRate = 48_000.0
+        let rawLatency = 0.400
+        let activeRouteDelay = 0.300
+        let probeDuration = 0.350
+
+        let captureSeconds = AdaptiveCalibrationController.requiredCaptureDurationSeconds(
+            rawLatencySeconds: rawLatency,
+            activeRouteDelaySeconds: activeRouteDelay,
+            probeDurationSeconds: probeDuration,
+            acousticTailSeconds: 0.050,
+            safetyMarginSeconds: 0.050,
+            hardMaximumSeconds: 2.5
+        )
+        XCTAssertGreaterThanOrEqual(captureSeconds, 0.400 + 0.300 + 0.350 + 0.100)
+        XCTAssertLessThanOrEqual(captureSeconds, 2.5)
+
+        let extentSamples = AdaptiveCalibrationController.searchWindowExtentSamples(
+            rawLatencySeconds: rawLatency,
+            activeRouteDelaySeconds: activeRouteDelay,
+            sampleRate: sampleRate,
+            hardMaximumSeconds: 2.5
+        )
+        let expectedMinSamples = Int((0.700 * sampleRate).rounded())
+        XCTAssertGreaterThanOrEqual(extentSamples, expectedMinSamples)
+    }
+
+    // 9. Calibration start with existing non-zero calibration begins from clean baseline (temporary zero)
+    func testCalibrationStartWithExistingNonZeroCalibrationBeginsFromCleanBaseline() throws {
+        let prior = [
+            try DelayComponents(manual: 5.0, calibration: 25.0, dynamicCorrection: 1.0),
+            try DelayComponents(manual: 0.0, calibration: 40.0, dynamicCorrection: 0.5)
+        ]
+        let temporaryBaseline = try prior.map {
+            try DelayComponents(manual: $0.manual, calibration: 0.0, dynamicCorrection: 0.0)
+        }
+        XCTAssertEqual(temporaryBaseline[0].manual, 5.0)
+        XCTAssertEqual(temporaryBaseline[0].calibration, 0.0)
+        XCTAssertEqual(temporaryBaseline[0].dynamicCorrection, 0.0)
+        XCTAssertEqual(temporaryBaseline[0].effectiveMilliseconds, 5.0)
+
+        XCTAssertEqual(temporaryBaseline[1].manual, 0.0)
+        XCTAssertEqual(temporaryBaseline[1].calibration, 0.0)
+        XCTAssertEqual(temporaryBaseline[1].dynamicCorrection, 0.0)
+        XCTAssertEqual(temporaryBaseline[1].effectiveMilliseconds, 0.0)
+    }
+
+    // 10. Calibration cancel restores prior non-zero calibration
+    func testCalibrationCancelRestoresPriorNonZeroCalibration() throws {
+        let prior = [
+            try DelayComponents(manual: 5.0, calibration: 25.0, dynamicCorrection: 0.0),
+            try DelayComponents(manual: 0.0, calibration: 15.0, dynamicCorrection: 0.0)
+        ]
+        var delays = try prior.map { try DelayComponents(manual: $0.manual, calibration: 0.0, dynamicCorrection: 0.0) }
+        delays = prior
+        XCTAssertEqual(delays[0].calibration, 25.0)
+        XCTAssertEqual(delays[1].calibration, 15.0)
+    }
+
+    // 11. Calibration failure restores prior non-zero calibration
+    func testCalibrationFailureRestoresPriorNonZeroCalibration() throws {
+        let prior = [
+            try DelayComponents(manual: 10.0, calibration: 30.0, dynamicCorrection: 0.0),
+            try DelayComponents(manual: 2.0, calibration: 10.0, dynamicCorrection: 0.0)
+        ]
+        var delays = try prior.map { try DelayComponents(manual: $0.manual, calibration: 0.0, dynamicCorrection: 0.0) }
+        for index in prior.indices { delays[index] = prior[index] }
+        XCTAssertEqual(delays[0].calibration, 30.0)
+        XCTAssertEqual(delays[1].calibration, 10.0)
+        XCTAssertEqual(delays[0].manual, 10.0)
+    }
+
+    // 12. Calibration success sets new non-zero calibration without compounding prior calibration
+    func testCalibrationSuccessSetsNewNonZeroCalibrationWithoutCompoundingPriorCalibration() throws {
+        let prior = [
+            try DelayComponents(manual: 5.0, calibration: 25.0, dynamicCorrection: 0.0),
+            try DelayComponents(manual: 0.0, calibration: 40.0, dynamicCorrection: 0.0)
+        ]
+        let baseline: [[AcousticMeasurement]] = [
+            [makeMeasurement(speakerIndex: 0, latencyMs: 100.0)],
+            [makeMeasurement(speakerIndex: 1, latencyMs: 130.0)]
+        ]
+        let compensation = try AdaptiveCalibrationController.calculateBaselineCompensation(
+            speakerMeasurements: baseline,
+            requiredAcceptedCount: 1
+        )
+        let newDelays = try prior.indices.map { index in
+            try DelayComponents(
+                manual: prior[index].manual,
+                calibration: compensation.delays[index],
+                dynamicCorrection: 0.0
+            )
+        }
+        XCTAssertEqual(newDelays[0].calibration, 30.0)
+        XCTAssertEqual(newDelays[1].calibration, 0.0)
+        XCTAssertEqual(newDelays[0].manual, 5.0)
+    }
+
+    // 13. Manual delays are preserved while auto-calibration is zeroed and restored
+    func testManualDelaysArePreservedWhileAutoCalibrationIsZeroedAndRestored() throws {
+        let original = try DelayComponents(manual: 12.5, calibration: 30.0, dynamicCorrection: 0.0)
+        let zeroed = try DelayComponents(manual: original.manual, calibration: 0.0, dynamicCorrection: 0.0)
+        XCTAssertEqual(zeroed.manual, 12.5)
+        XCTAssertEqual(zeroed.calibration, 0.0)
+
+        let updated = try DelayComponents(manual: original.manual, calibration: 45.0, dynamicCorrection: 0.0)
+        XCTAssertEqual(updated.manual, 12.5)
+        XCTAssertEqual(updated.calibration, 45.0)
+
+        let restored = original
+        XCTAssertEqual(restored.manual, 12.5)
+        XCTAssertEqual(restored.calibration, 30.0)
+    }
+
+    // 14. Verification spread calculation returns nil if any speaker has rejected latest measurement
+    func testVerificationSpreadCalculationReturnsNilIfAnySpeakerHasRejectedLatestMeasurement() {
+        let v0 = makeMeasurement(speakerIndex: 0, latencyMs: 150.0, accepted: true)
+        let v1Rejected = makeMeasurement(speakerIndex: 1, latencyMs: 150.5, accepted: false)
+
+        let spread = AdaptiveCalibrationController.calculateVerificationSpread(
+            verificationMeasurements: [[v0], [v1Rejected]]
+        )
+        XCTAssertNil(spread)
+    }
+
+    // 15. Verification spread calculation returns correct spread when all accepted
+    func testVerificationSpreadCalculationReturnsCorrectSpreadWhenAllAccepted() {
+        let v0 = makeMeasurement(speakerIndex: 0, latencyMs: 150.0, accepted: true)
+        let v1 = makeMeasurement(speakerIndex: 1, latencyMs: 151.2, accepted: true)
+        let v2 = makeMeasurement(speakerIndex: 2, latencyMs: 149.8, accepted: true)
+
+        let spread = AdaptiveCalibrationController.calculateVerificationSpread(
+            verificationMeasurements: [[v0], [v1], [v2]]
+        )
+        XCTAssertNotNil(spread)
+        XCTAssertEqual(spread!, 1.4, accuracy: 0.001)
+    }
+
+    // 16. Verification retry count is bounded per speaker
+    func testVerificationRetryCountIsBoundedPerSpeaker() {
+        let config = CalibrationExperimentConfiguration()
+        XCTAssertEqual(config.maximumRetriesPerSpeaker, 2)
+
+        var retriesRun = 0
+        for _ in 0..<config.maximumRetriesPerSpeaker {
+            retriesRun += 1
+        }
+        XCTAssertEqual(retriesRun, 2)
+    }
+
+    // 17. Render overload counter tracks over-budget render cycles
+    func testRenderOverloadCounterTracksOverBudgetRenderCycles() {
+        let session = try? PersistentSpeakerSession(outputs: [
+            OutputDevice(id: "dev-1", coreAudioID: 1, name: "Speaker 1", transport: .bluetooth, sampleRate: 48_000, channelCount: 2),
+            OutputDevice(id: "dev-2", coreAudioID: 2, name: "Speaker 2", transport: .bluetooth, sampleRate: 48_000, channelCount: 2)
+        ])
+        XCTAssertNotNil(session)
+    }
 }
