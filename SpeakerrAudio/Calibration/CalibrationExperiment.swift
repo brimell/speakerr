@@ -17,13 +17,13 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
     public init(
         preRollSeconds: Double = 0.2,
         chirpDurationSeconds: Double = 0.16,
-        intervalSeconds: Double = 0.55,
+        intervalSeconds: Double = 0.85,
         passGapSeconds: Double = 0,
-        postRollSeconds: Double = 0.08,
+        postRollSeconds: Double = 0.4,
         measurementsPerSpeaker: Int = 3,
         maximumPasses: Int = 3,
         maximumRetriesPerSpeaker: Int = 2,
-        maximumAcousticLatencySeconds: Double = 0.08,
+        maximumAcousticLatencySeconds: Double = 0.4,
         targetResidualMilliseconds: Double = 2,
         level: Double = 0.12,
         stabilityMeasurementOffsetsSeconds: [Double] = []

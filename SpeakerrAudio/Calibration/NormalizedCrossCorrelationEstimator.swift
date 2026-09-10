@@ -23,7 +23,7 @@ public enum DelayEstimatorError: LocalizedError, Equatable {
     case insufficientRecording
     case invalidSearchWindow
     case signalTooWeak
-    case lowConfidence(confidence: Double, peak: Double, prominence: Double)
+    case lowConfidence(confidence: Double, peak: Double, secondBestPeak: Double, prominence: Double, sampleOffset: Double)
 
     public var errorDescription: String? {
         switch self {
@@ -31,8 +31,8 @@ public enum DelayEstimatorError: LocalizedError, Equatable {
         case .insufficientRecording: "The recording is shorter than the calibration signal."
         case .invalidSearchWindow: "The requested correlation search window contains no complete signal."
         case .signalTooWeak: "The microphone signal is too weak for calibration."
-        case .lowConfidence(let confidence, let peak, let prominence):
-            "Correlation confidence is too low (confidence=\(String(format: "%.2f", confidence)), peak=\(String(format: "%.3f", peak)), prominence=\(String(format: "%.2f", prominence)))."
+        case .lowConfidence(let confidence, let peak, let secondBestPeak, let prominence, let sampleOffset):
+            "Correlation confidence is too low (confidence=\(String(format: "%.2f", confidence)), peak=\(String(format: "%.3f", peak)), secondBest=\(String(format: "%.3f", secondBestPeak)), prominence=\(String(format: "%.2f", prominence)), offset=\(String(format: "%.1f", sampleOffset)) samples)."
         }
     }
 }
@@ -110,7 +110,7 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
         }
         let estimate = DelayEstimate(sampleOffset: Double(lower) + fractionalIndex, sampleRate: sampleRate, confidence: confidence, peakValue: peak, secondBestPeak: secondBest, peakProminence: prominence)
         guard peak >= minimumPeak, prominence >= minimumProminence, confidence >= minimumConfidence else {
-            throw DelayEstimatorError.lowConfidence(confidence: confidence, peak: peak, prominence: prominence)
+            throw DelayEstimatorError.lowConfidence(confidence: confidence, peak: peak, secondBestPeak: secondBest, prominence: prominence, sampleOffset: estimate.sampleOffset)
         }
         return estimate
     }
@@ -187,7 +187,7 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
             peakProminence: prominence
         )
         guard peak >= minimumPeak, prominence >= minimumProminence, confidence >= minimumConfidence else {
-            throw DelayEstimatorError.lowConfidence(confidence: confidence, peak: peak, prominence: prominence)
+            throw DelayEstimatorError.lowConfidence(confidence: confidence, peak: peak, secondBestPeak: secondBest, prominence: prominence, sampleOffset: estimate.sampleOffset)
         }
         return estimate
     }

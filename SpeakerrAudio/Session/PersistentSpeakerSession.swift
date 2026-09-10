@@ -1,6 +1,7 @@
 import AudioToolbox
 import CoreAudio
 import Foundation
+import os
 import Synchronization
 
 private final class RouteVolume: @unchecked Sendable {
@@ -244,6 +245,7 @@ public struct PersistentSessionStatus: Sendable {
 }
 
 public final class PersistentSpeakerSession: @unchecked Sendable {
+    private let calibrationLogger = Logger(subsystem: "com.speakerr.app", category: "calibration")
     public let outputUIDs: [String]
     public private(set) var outputs: [OutputDevice]
     public private(set) var generation: UInt64
@@ -361,6 +363,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         configuration.selectedSpeakerCount = outputs.count
         try configuration.validate()
         guard running, let reference, let renderState else { throw AudioRoutingError.notConfigured }
+        calibrationLogger.notice("Calibration microphone: \(input.name, privacy: .public) uid=\(input.id, privacy: .public) transport=\(input.transport.rawValue, privacy: .public) sampleRate=\(input.sampleRate, privacy: .public)Hz; acoustic search window=\(configuration.maximumAcousticLatencySeconds, privacy: .public)s")
         try configuration.validateSchedule(signalDurationSeconds: reference.durationSeconds)
         guard abs(input.sampleRate - sampleRate) < 0.01 else { throw CalibrationSessionError.requiresMatchingSampleRates(output: sampleRate, input: input.sampleRate) }
         let priorState = stateMachine.state
@@ -491,7 +494,10 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                 do {
                     values[speaker].append(try await emitAndMeasure(pass: pass, sequence: attempt * outputs.count + speaker, speaker: speaker, configuration: configuration, microphone: microphone, reference: reference))
                 } catch {
-                    failures.append("pass=\(pass + 1) attempt=\(attempt + 1) speaker=\(speaker): \(error.localizedDescription)")
+                    let detail = calibrationFailureDetail(error, sampleRate: sampleRate)
+                    let message = "pass=\(pass + 1) attempt=\(attempt + 1) speaker=\(outputs[speaker].name): \(detail)"
+                    failures.append(message)
+                    calibrationLogger.error("Calibration rejected \(message, privacy: .public)")
                 }
                 // Each pass has a bounded number of attempts per speaker, including retries.
                 // Report completed attempt work rather than only valid measurements.
@@ -549,6 +555,14 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         let latency = Double(Int64(AudioConvertHostTimeToNanos(arrivalHost)) - Int64(AudioConvertHostTimeToNanos(host))) / 1_000_000
         emissionSequence += 1
         return AcousticMeasurement(emission: CalibrationEmission(pass: pass, sequence: emissionSequence, speakerIndex: speaker, scheduledOutputFrame: startFrame, scheduledOutputHostTime: host), arrivalHostTime: arrivalHost, acousticLatencyMilliseconds: latency, estimate: estimate)
+    }
+
+    private func calibrationFailureDetail(_ error: Error, sampleRate: Double) -> String {
+        guard case .lowConfidence(let confidence, let peak, let secondBestPeak, let prominence, let sampleOffset) = error as? DelayEstimatorError else {
+            return error.localizedDescription
+        }
+        let milliseconds = sampleOffset * 1_000 / sampleRate
+        return "lowConfidence peak=\(String(format: "%.3f", peak)) secondBest=\(String(format: "%.3f", secondBestPeak)) prominence=\(String(format: "%.3f", prominence)) confidence=\(String(format: "%.3f", confidence)) offset=\(String(format: "%.2f", milliseconds))ms"
     }
 
     private func applyResidual(_ residual: Double) throws {

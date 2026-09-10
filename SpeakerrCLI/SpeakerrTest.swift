@@ -267,7 +267,7 @@ struct SpeakerrTest {
 
             if let path = options.diagnosticsDirectory {
                 let captured = try session.capturedAudio()
-                let reference = try LogarithmicChirpGenerator(durationSeconds: configuration.chirpDurationSeconds, level: configuration.level).generate(sampleRate: session.sampleRate)
+                let reference = try GolayComplementaryPairGenerator(level: configuration.level).generate(sampleRate: session.sampleRate)
                 let metadata = CalibrationDiagnosticMetadata(
                     outputUIDs: [outputA.id, outputB.id], outputNames: [outputA.name, outputB.name],
                     inputUID: input.id, inputName: input.name, sampleRate: session.sampleRate,
@@ -282,7 +282,7 @@ struct SpeakerrTest {
         } catch {
             if let path = options.diagnosticsDirectory, session.sampleRate > 0,
                let captured = try? session.capturedAudio(),
-               let reference = try? LogarithmicChirpGenerator(durationSeconds: configuration.chirpDurationSeconds, level: configuration.level).generate(sampleRate: session.sampleRate) {
+               let reference = try? GolayComplementaryPairGenerator(level: configuration.level).generate(sampleRate: session.sampleRate) {
                 let metadata = CalibrationDiagnosticMetadata(
                     outputUIDs: [outputA.id, outputB.id], outputNames: [outputA.name, outputB.name], inputUID: input.id, inputName: input.name,
                     sampleRate: session.sampleRate, configuration: configuration, emissions: session.allEmissions(), passes: completedPasses,
