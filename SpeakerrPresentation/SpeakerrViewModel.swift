@@ -277,11 +277,12 @@ public final class SpeakerrViewModel {
                 let finalPass = passes.last
                 let snapshot = try? await controller.snapshot()
                 if let pass = finalPass {
-                    calibrationSpeakerResults = pass.speakerEstimates.enumerated().map { index, estimate in
+                    let applied = pass.canApplyCompensation && snapshot?.status?.state == .aligned
+                    let estimationPass = applied ? (passes.first ?? pass) : pass
+                    calibrationSpeakerResults = estimationPass.speakerEstimates.enumerated().map { index, estimate in
                         let speaker = snapshot?.selectedOutputs.indices.contains(index) == true ? snapshot?.selectedOutputs[index] : nil
                         return CalibrationSpeakerResult(id: speaker?.id ?? "speaker-\(index + 1)", speakerName: speaker?.name ?? "Speaker \(index + 1)", detectedLatencyMilliseconds: estimate.delayMilliseconds, confidence: estimate.confidence, quality: estimate.quality, measurementCount: estimate.measurementCount, acceptedMeasurementCount: estimate.acceptedMeasurementCount, spreadMilliseconds: estimate.summary?.spreadMilliseconds, evidenceCount: estimate.clusterMembers.count)
                     }
-                    let applied = pass.canApplyCompensation && snapshot?.status?.state == .aligned
                     // Recheck arrivals already contain the applied delay. Do not add it a second time.
                     let arrivals = pass.speakerEstimates.compactMap(\.delayMilliseconds)
                     if applied, arrivals.count == pass.speakerEstimates.count {

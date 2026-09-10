@@ -447,7 +447,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                 let degraded = passes.contains { $0.quality != .high }
                 if abs(residual) <= configuration.targetResidualMilliseconds || (degraded && pass == configuration.maximumPasses - 1 && pass > 0) {
                     let allMeasurements = measured.measurementsBySpeaker.flatMap { $0 }
-                    let confidence = allMeasurements.map(\.estimate.confidence).reduce(0, +) / Double(allMeasurements.count)
+                    let confidence = degraded ? (measured.speakerEstimates.map(\.confidence).min() ?? 0) : allMeasurements.map(\.estimate.confidence).reduce(0, +) / Double(allMeasurements.count)
                     #if DEBUG
                     precondition(outputUIDs.count == delayComponents.count, "Calibration snapshot UID and delay counts must match")
                     #endif
@@ -525,6 +525,9 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
 
     public func recheck(input: InputDevice, configuration: CalibrationExperimentConfiguration = .init()) async throws -> CalibrationPassMeasurements {
         guard calibrationIsValid else { throw CalibrationSessionError.didNotConverge(residualMilliseconds: .infinity) }
+        diagnosticRunID = UUID().uuidString
+        diagnosticInputUID = input.id
+        diagnosticInputName = input.name
         programmeCapture?.pause(); transport.discardAll(); renderState?.setMode(.calibration)
         let microphone = try ContinuousMicrophoneCapture(device: input, sampleRate: sampleRate, maximumDurationSeconds: 20)
         microphoneCapture = microphone
@@ -637,11 +640,12 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         #endif
         guard residuals.count == delayComponents.count else { throw CalibrationSessionError.invalidConfiguration }
         guard let maximum = residuals.max() else { return }
-        for (index, residual) in residuals.enumerated() {
+        let updated = try residuals.enumerated().map { index, residual in
             let old = delayComponents[index]
-            let delay = maximum - residual
-            try setDelayComponents(index: index, value: DelayComponents(manual: old.manual, calibration: old.calibration + delay, dynamicCorrection: old.dynamicCorrection))
+            return try DelayComponents(manual: old.manual, calibration: old.calibration + maximum - residual, dynamicCorrection: old.dynamicCorrection)
         }
+        for index in updated.indices { try setDelayComponents(index: index, value: updated[index]) }
+        calibrationLogger.notice("Calibration compensation applied vector=\(self.delayComponents.map(\.calibration), privacy: .public)")
     }
 
     private func emitAndMeasure(pass: Int, sequence: Int, speaker: Int, configuration: CalibrationExperimentConfiguration, microphone: ContinuousMicrophoneCapture, reference: CalibrationSignal) async throws -> AcousticMeasurement {
@@ -669,6 +673,12 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         let lower = max(0, Int(floor(scheduledInput)) - sliceStart - preSearch)
         let upper = min(recording.count - reference.samples.count + 1, searchEnd - sliceStart)
         calibrationLogger.notice("Calibration measurement scheduled speakerIndex=\(speaker, privacy: .public) speakerName=\(self.outputs[speaker].name, privacy: .public) scheduledHostTime=\(host, privacy: .public) microphoneSampleIndex=\(scheduledInput, privacy: .public) searchWindowStart=\(lower, privacy: .public) searchWindowEnd=\(upper, privacy: .public)")
+        var savedCandidate = false
+        defer {
+            if !savedCandidate {
+                dumpUnavailableMeasurement(speaker: speaker, attempt: sequence / max(1, outputs.count) + 1, request: request, captured: captured, scheduledInput: scheduledInput, sliceStart: sliceStart, searchRange: lower..<upper)
+            }
+        }
         let estimate: DelayEstimate
         var correlationDiagnostics: DelayCorrelationDiagnostics?
         if let (a, b) = reference.complementarySequences {
@@ -681,6 +691,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         let arrivalHost = try captured.hostTime(atSampleIndex: Double(sliceStart) + estimate.sampleOffset)
         let latency = Double(Int64(AudioConvertHostTimeToNanos(arrivalHost)) - Int64(AudioConvertHostTimeToNanos(host))) / 1_000_000
         if let correlationDiagnostics {
+            savedCandidate = true
             dumpMeasurement(speaker: speaker, attempt: sequence / max(1, outputs.count) + 1, request: request, pass: pass, captured: captured, scheduledInput: scheduledInput, recording: recording, sliceStart: sliceStart, searchRange: lower..<upper, reference: reference, diagnostics: correlationDiagnostics, estimate: estimate, latency: latency)
             logMeasurementDiagnostics(speaker: speaker, attempt: sequence / max(1, outputs.count) + 1, captured: captured, scheduledInput: scheduledInput, recording: recording, sliceStart: sliceStart, searchRange: lower..<upper, reference: reference, maximumAcousticLatencySeconds: configuration.maximumAcousticLatencySeconds, diagnostics: correlationDiagnostics, estimate: estimate, error: nil)
         }
@@ -695,9 +706,9 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         let bStart = candidate + a.count + reference.interSequenceSilenceSamples
         let aRange = candidate..<min(recording.count, candidate + a.count)
         let bRange = bStart..<min(recording.count, bStart + b.count)
-        let beforeEnd = max(0, candidate - Int((0.02 * sampleRate).rounded()))
+        let beforeEnd = max(0, Int(floor(scheduledInput)))
         let beforeStart = max(0, beforeEnd - Int((0.08 * sampleRate).rounded()))
-        let noiseRMS = rms(recording, range: beforeStart..<beforeEnd)
+        let noiseRMS = rms(captured.samples, range: beforeStart..<beforeEnd)
         let aRMS = rms(recording, range: aRange)
         let bRMS = rms(recording, range: bRange)
         let signalRMS = sqrt((aRMS * aRMS + bRMS * bRMS) * 0.5)
@@ -719,6 +730,29 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             return total + value * value
         }
         return sqrt(sum / Double(range.count))
+    }
+
+    private func dumpUnavailableMeasurement(speaker: Int, attempt: Int, request: UInt64, captured: CapturedAudio, scheduledInput: Double, sliceStart: Int, searchRange: Range<Int>) {
+        #if DEBUG
+        let uid = String(outputs[speaker].id.map { $0.isLetter || $0.isNumber || $0 == "-" ? $0 : "_" })
+        let stem = "\(diagnosticRunID)_req\(request)_\(uid)_attempt\(attempt)_rejected"
+        let directory = URL(fileURLWithPath: "/tmp/speakerr-calibration-diagnostics").appendingPathComponent(diagnosticRunID).appendingPathComponent(stem)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try CalibrationDiagnosticWriter.writeFloatWAV(samples: captured.samples, sampleRate: sampleRate, to: directory.appendingPathComponent("\(stem)_waveform.wav"))
+            for name in ["A", "B", "combined"] {
+                try "aArrivalSliceOffset,acousticLatencyMilliseconds,signedNCC\n".write(to: directory.appendingPathComponent("\(stem)_correlation_\(name)_signed.csv"), atomically: true, encoding: .utf8)
+            }
+            let metadata: [String: Any] = ["runID": diagnosticRunID, "attempt": attempt, "emissionRequestID": request,
+                "speakerUID": outputs[speaker].id, "speakerName": outputs[speaker].name, "inputUID": diagnosticInputUID,
+                "sampleRate": sampleRate, "probeLevel": probeLevel, "accepted": false,
+                "rejectionReason": "No mathematically usable estimate; see run errors or calibration attempt log", "candidateLatencyMilliseconds": NSNull(),
+                "scheduledInputSampleIndex": scheduledInput, "captureSliceStart": sliceStart, "waveformStartSampleIndex": 0,
+                "searchRangeStart": searchRange.lowerBound, "searchRangeEnd": searchRange.upperBound,
+                "hardwareVolume": hardwareVolumeState(speaker: speaker)]
+            try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys]).write(to: directory.appendingPathComponent("\(stem)_metadata.json"), options: .atomic)
+        } catch { calibrationLogger.error("Unavailable measurement artifact failed: \(error.localizedDescription, privacy: .public)") }
+        #endif
     }
 
     private func dumpMeasurement(speaker: Int, attempt: Int, request: UInt64, pass: Int, captured: CapturedAudio, scheduledInput: Double, recording: [Float], sliceStart: Int, searchRange: Range<Int>, reference: CalibrationSignal, diagnostics: DelayCorrelationDiagnostics, estimate: DelayEstimate, latency: Double) {
@@ -751,6 +785,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             let aLatency = (origin + diagnostics.aBestStartOffset) * 1_000 / sampleRate
             let bLatency = (origin + diagnostics.bBestArrivalOffset) * 1_000 / sampleRate
             let metadata: [String: Any] = [
+                "executablePath": Bundle.main.executableURL?.path ?? "unknown",
                 "runID": diagnosticRunID, "createdAt": ISO8601DateFormatter().string(from: Date()),
                 "emissionRequestID": request, "pass": pass + 1, "attempt": attempt,
                 "speakerName": outputs[speaker].name, "speakerUID": outputs[speaker].id,
@@ -776,9 +811,12 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                 "combinedSignedPeak": diagnostics.signedCombinedPeak, "combinedPeakOffset": diagnostics.sampleOffset,
                 "combinedPeak": estimate.peakValue, "secondBestPeak": estimate.secondBestPeak,
                 "prominence": estimate.peakProminence, "confidence": estimate.confidence,
+                "rmsAAtIndependentPeak": rms(recording, range: Int(diagnostics.aBestStartOffset)..<min(recording.count, Int(diagnostics.aBestStartOffset) + a.count)),
+                "rmsBAtIndependentPeak": rms(recording, range: Int(diagnostics.bBestStartOffset)..<min(recording.count, Int(diagnostics.bBestStartOffset) + b.count)),
                 "rmsA": aRMS, "rmsB": bRMS, "noiseRMS": noise, "diagnosticSNRdB": snr
             ]
             try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys]).write(to: directory.appendingPathComponent("\(stem)_metadata.json"), options: .atomic)
+            calibrationLogger.notice("Calibration AB offsets A_start=\(diagnostics.aBestStartOffset, privacy: .public) B_start=\(diagnostics.bBestStartOffset, privacy: .public) expectedSpacing=\(diagnostics.expectedBStartRelativeToA, privacy: .public) measuredSpacing=\(diagnostics.bBestStartOffset - diagnostics.aBestStartOffset, privacy: .public) separationErrorSamples=\(diagnostics.abSeparationErrorSamples, privacy: .public) combinedSignedPeak=\(diagnostics.signedCombinedPeak, privacy: .public) combinedOffset=\(diagnostics.sampleOffset, privacy: .public)")
             calibrationLogger.notice("Calibration AB timing runID=\(self.diagnosticRunID, privacy: .public) request=\(request, privacy: .public) A_latency=\(aLatency, privacy: .public) B_latency=\(bLatency, privacy: .public) AB_difference=\(bLatency - aLatency, privacy: .public) A_peak=\(diagnostics.aBestSignedPeak, privacy: .public) B_peak=\(diagnostics.bBestSignedPeak, privacy: .public) artifacts=\(directory.path, privacy: .public)")
         } catch {
             calibrationLogger.error("Calibration diagnostic capture failed: \(error.localizedDescription, privacy: .public)")
