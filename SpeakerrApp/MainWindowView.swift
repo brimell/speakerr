@@ -36,8 +36,8 @@ struct MainWindowView: View {
             SpeakerSelectionView(model: model)
         }
         .sheet(isPresented: $model.isCalibrationPresented) {
-            print("[CalibrationTrace] MainWindowView calibration sheet content mounted model=\(ObjectIdentifier(model))")
             CalibrationSheet(model: model)
+                .onAppear { CalibrationTrace.log("MainWindowView calibration sheet content mounted model=\(ObjectIdentifier(model))") }
         }
         .sheet(isPresented: $model.isDiagnosticsPresented) {
             DiagnosticsView(model: model)
@@ -114,7 +114,7 @@ struct MainWindowView: View {
             CalibrationSummaryView(presentation: model.presentation.calibration, detail: model.presentation.statusDetail)
             HStack {
                 Button(calibrationButtonTitle) {
-                    print("[CalibrationTrace] MainWindowView calibration button action model=\(ObjectIdentifier(model))")
+                    CalibrationTrace.log("MainWindowView calibration button action model=\(ObjectIdentifier(model))")
                     model.isCalibrationPresented = true
                 }
                     .buttonStyle(.borderedProminent)

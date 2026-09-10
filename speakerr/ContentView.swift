@@ -341,7 +341,7 @@ struct ContentView: View {
 
                     if selectedOutputDevices.count >= 2 {
                         Button {
-                            print("[CalibrationTrace] ContentView compact Calibrate button action")
+                            CalibrationTrace.log("ContentView compact Calibrate button action")
                             SpeakerrStore.model.isCalibrationPresented = true
                             MainWindowCoordinator.shared.show()
                         } label: {
