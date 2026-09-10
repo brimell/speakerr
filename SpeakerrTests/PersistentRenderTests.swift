@@ -126,4 +126,36 @@ final class PersistentRenderTests: XCTestCase {
         XCTAssertEqual(channels[2][0], 0.25)
         XCTAssertEqual(channels[3][0], 0.25)
     }
+
+    func testCalibrationRoutesSpeakerTwoProbeOnlyToThirdOutput() throws {
+        let fixture = try RenderFixture(mode: .mono, channelCounts: [2, 2, 2], bufferChannels: [1, 1, 1, 1, 1, 1], delays: [0, 0, 0])
+        fixture.state.setMode(.calibration)
+        _ = fixture.state.requestEmission(speaker: 2)
+        var channels: [[Float]] = []
+        for _ in 0..<10 { channels = fixture.render() }
+
+        XCTAssertEqual(channels.count, 6)
+        XCTAssertEqual(channels[0], .init(repeating: 0, count: 64))
+        XCTAssertEqual(channels[1], .init(repeating: 0, count: 64))
+        XCTAssertEqual(channels[2], .init(repeating: 0, count: 64))
+        XCTAssertEqual(channels[3], .init(repeating: 0, count: 64))
+        XCTAssertEqual(channels[4][0], 0.25)
+        XCTAssertEqual(channels[5][0], 0.25)
+    }
+
+    func testCalibrationEmissionRequestsZeroOneAndTwoSelectMatchingRoutes() throws {
+        for requestedSpeaker in 0..<3 {
+            let fixture = try RenderFixture(mode: .mono, channelCounts: [2, 2, 2], bufferChannels: [1, 1, 1, 1, 1, 1], delays: [0, 0, 0])
+            fixture.state.setMode(.calibration)
+            _ = fixture.state.requestEmission(speaker: requestedSpeaker)
+            var channels: [[Float]] = []
+            for _ in 0..<10 { channels = fixture.render() }
+
+            for route in 0..<3 {
+                let expected: Float = route == requestedSpeaker ? 0.25 : 0
+                XCTAssertEqual(channels[route * 2][0], expected, accuracy: 0.00001, "requested speaker \(requestedSpeaker), route \(route)")
+                XCTAssertEqual(channels[route * 2 + 1][0], expected, accuracy: 0.00001, "requested speaker \(requestedSpeaker), route \(route)")
+            }
+        }
+    }
 }

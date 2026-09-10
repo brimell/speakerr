@@ -80,7 +80,7 @@ public final class AggregateDeviceManager {
                 driftCompensatedUIDs: outputs.dropFirst().map(\.id)
             )
             session = created
-            logger.info("Created private aggregate id=\(aggregateID, privacy: .public) rate=\(created.sampleRate, privacy: .public) channels=\(actualChannels, privacy: .public) clock=\(outputs[0].id, privacy: .public) drift=\(outputs[1].id, privacy: .public)")
+            logger.info("Created private aggregate id=\(aggregateID, privacy: .public) rate=\(created.sampleRate, privacy: .public) subdevices=\(composedSubdevices.count, privacy: .public) channelCounts=\(created.channelCounts, privacy: .public) channels=\(actualChannels, privacy: .public) clock=\(created.mainDeviceUID, privacy: .public) driftCompensatedUIDs=\(created.driftCompensatedUIDs, privacy: .public)")
             return created
         } catch {
             restoreSampleRates()

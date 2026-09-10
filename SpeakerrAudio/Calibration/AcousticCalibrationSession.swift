@@ -122,7 +122,7 @@ public final class AcousticCalibrationSession: @unchecked Sendable {
     public let configuration: CalibrationExperimentConfiguration
     public private(set) var sampleRate: Double = 0
     public private(set) var manualDelays: [Double]
-    public private(set) var calibrationDelays = [0.0, 0.0]
+    public private(set) var calibrationDelays: [Double]
 
     private let aggregateManager = AggregateDeviceManager()
     private let estimator: NormalizedCrossCorrelationEstimator
@@ -145,6 +145,7 @@ public final class AcousticCalibrationSession: @unchecked Sendable {
         self.configuration = configuration
         self.estimator = estimator
         manualDelays = outputs.map(\.delayMilliseconds)
+        calibrationDelays = outputs.map { _ in 0 }
     }
 
     deinit { stopSynchronously() }
@@ -164,7 +165,7 @@ public final class AcousticCalibrationSession: @unchecked Sendable {
                 sampleRate: sampleRate,
                 chirp: generated.samples,
                 channelCounts: aggregate.channelCounts,
-                initialDelays: zip(manualDelays, calibrationDelays).map(+),
+                initialDelays: outputs.indices.map { manualDelays[$0] + calibrationDelays[$0] },
                 events: plannedEvents
             )
             let capture = try ContinuousMicrophoneCapture(device: input, sampleRate: sampleRate, maximumDurationSeconds: configuration.maximumSessionSeconds)

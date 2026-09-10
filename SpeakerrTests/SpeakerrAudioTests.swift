@@ -60,7 +60,8 @@ final class SpeakerrAudioTests: XCTestCase {
     func testAggregateDescriptionUsesIndependentChannelsAndDrift() {
         let first = OutputDevice(id: "first", coreAudioID: 1, name: "First", transport: .bluetooth, sampleRate: 44_100, channelCount: 2)
         let second = OutputDevice(id: "second", coreAudioID: 2, name: "Second", transport: .usb, sampleRate: 44_100, channelCount: 2)
-        let description = AggregateDeviceManager.makeDescription(outputs: [first, second], uid: "aggregate")
+        let third = OutputDevice(id: "third", coreAudioID: 3, name: "Third", transport: .displayPort, sampleRate: 44_100, channelCount: 1)
+        let description = AggregateDeviceManager.makeDescription(outputs: [first, second, third], uid: "aggregate")
         XCTAssertEqual(description["uid"] as? String, "aggregate")
         XCTAssertEqual(description["master"] as? String, "first")
         XCTAssertEqual(description["private"] as? Int, 1)
@@ -68,8 +69,10 @@ final class SpeakerrAudioTests: XCTestCase {
         guard let subdevices = description["subdevices"] as? [[String: Any]] else {
             return XCTFail("Missing subdevice descriptions")
         }
+        XCTAssertEqual(subdevices.count, 3)
         XCTAssertEqual(subdevices[0]["drift"] as? Int, 0)
         XCTAssertEqual(subdevices[1]["drift"] as? Int, 1)
+        XCTAssertEqual(subdevices[2]["drift"] as? Int, 1)
     }
 
     func testDelayCanBeUpdatedAtomically() throws {
