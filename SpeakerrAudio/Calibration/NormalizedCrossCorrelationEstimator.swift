@@ -188,18 +188,20 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
         let mean = ref.reduce(0, +) / Double(ref.count)
         let centered = ref.map { $0 - mean }
         let energy = centered.reduce(0) { $0 + $1 * $1 }
+        let recordingDouble = recording.map(Double.init)
+        let convolution = FFT.convolve(recordingDouble, centered.reversed())
+        var prefix = [Double](repeating: 0, count: recording.count + 1)
+        var prefixSquares = [Double](repeating: 0, count: recording.count + 1)
+        for index in recording.indices {
+            prefix[index + 1] = prefix[index] + recordingDouble[index]
+            prefixSquares[index + 1] = prefixSquares[index] + recordingDouble[index] * recordingDouble[index]
+        }
         var result = [Double](repeating: 0, count: upper - lower)
         for start in lower..<upper {
-            var sum = 0.0
-            var squares = 0.0
-            for index in 0..<ref.count {
-                let value = Double(recording[start + index])
-                sum += value
-                squares += value * value
-            }
+            let sum = prefix[start + ref.count] - prefix[start]
+            let squares = prefixSquares[start + ref.count] - prefixSquares[start]
             let centeredEnergy = max(0, squares - sum * sum / Double(ref.count))
-            var numerator = 0.0
-            for index in 0..<ref.count { numerator += Double(recording[start + index]) * centered[index] }
+            let numerator = convolution[start + ref.count - 1]
             let denominator = sqrt(energy * centeredEnergy)
             result[start - lower] = denominator > 1e-12 ? abs(numerator / denominator) : 0
         }
