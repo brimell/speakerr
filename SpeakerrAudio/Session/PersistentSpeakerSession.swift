@@ -428,7 +428,12 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                 if abs(residual) <= configuration.targetResidualMilliseconds {
                     let allMeasurements = measured.measurementsBySpeaker.flatMap { $0 }
                     let confidence = allMeasurements.map(\.estimate.confidence).reduce(0, +) / Double(allMeasurements.count)
-                    calibrationSnapshot = CalibrationSnapshot(outputUIDs: outputUIDs, sampleRate: sampleRate, compensationByUID: Dictionary(uniqueKeysWithValues: zip(outputUIDs, delayComponents.map(\.calibration))), residualMilliseconds: abs(residual), confidence: confidence, sessionGeneration: generation)
+                    #if DEBUG
+                    precondition(outputUIDs.count == delayComponents.count, "Calibration snapshot UID and delay counts must match")
+                    #endif
+                    guard outputUIDs.count == delayComponents.count else { throw CalibrationSessionError.invalidConfiguration }
+                    let compensationByUID = Dictionary(uniqueKeysWithValues: outputUIDs.indices.map { (outputUIDs[$0], delayComponents[$0].calibration) })
+                    calibrationSnapshot = CalibrationSnapshot(outputUIDs: outputUIDs, sampleRate: sampleRate, compensationByUID: compensationByUID, residualMilliseconds: abs(residual), confidence: confidence, sessionGeneration: generation)
                     _ = try stateMachine.handle(.calibrationSucceeded)
                     progress?(.init(phase: .completed, progressFraction: 1))
                     resumeProgramme()
