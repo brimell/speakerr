@@ -86,6 +86,19 @@ final class SpeakerrViewModelTests: XCTestCase {
         XCTAssertTrue(calibrationCancelled)
     }
 
+    func testCalibrationFallsBackToAvailableMicrophoneWhenPreferenceIsMissing() async throws {
+        let fixture = try makeFixture(state: .ready, validCalibration: false)
+        fixture.model.preferences.preferredMicrophoneUID = nil
+        await fixture.model.refresh()
+
+        fixture.model.calibrate()
+        try await Task.sleep(for: .milliseconds(50))
+        fixture.model.cancelCalibration()
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(fixture.model.preferences.preferredMicrophoneUID, "mic")
+    }
+
     func testPassiveRefreshEquivalentToWindowCloseReopenDoesNotMutateSession() async throws {
         let fixture = try makeFixture(state: .aligned, validCalibration: true)
         await fixture.model.refresh()

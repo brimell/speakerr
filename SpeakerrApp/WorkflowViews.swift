@@ -173,7 +173,7 @@ struct CalibrationSheet: View {
                 case .success:
                     Button("Calibrate Again") { model.calibrate() }
                         .buttonStyle(.bordered)
-                        .disabled(model.preferences.preferredMicrophoneUID == nil)
+                        .disabled(model.availableInputs.isEmpty)
                     Button("Done") { dismiss() }
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.defaultAction)
@@ -182,7 +182,7 @@ struct CalibrationSheet: View {
                 case .none:
                     Button("Start Calibration") { model.calibrate() }
                         .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
-                        .disabled(model.preferences.preferredMicrophoneUID == nil)
+                        .disabled(model.availableInputs.isEmpty)
                 }
             }
         }

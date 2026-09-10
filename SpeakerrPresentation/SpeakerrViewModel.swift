@@ -220,11 +220,12 @@ public final class SpeakerrViewModel {
     }
 
     public func calibrate() {
-        guard let inputUID = preferences.preferredMicrophoneUID else {
+        guard let inputUID = resolvedCalibrationInputUID else {
             presentation.statusDetail = "Choose a microphone before calibrating."
             isCalibrationPresented = true
             return
         }
+        preferences.preferredMicrophoneUID = inputUID
         calibrationTask?.cancel()
         calibrationRunID &+= 1
         let runID = calibrationRunID
@@ -272,6 +273,14 @@ public final class SpeakerrViewModel {
             isBusy = false
             await refresh()
         }
+    }
+
+    private var resolvedCalibrationInputUID: String? {
+        if let preferred = preferences.preferredMicrophoneUID,
+           availableInputs.contains(where: { $0.id == preferred }) {
+            return preferred
+        }
+        return availableInputs.first?.id
     }
 
     public func cancelCalibration() {
