@@ -263,7 +263,7 @@ public final class SpeakerrViewModel {
                 var configuration = CalibrationExperimentConfiguration()
                 configuration.measurementsPerSpeaker = preferences.measurementsPerSpeaker
                 #if DEBUG
-                configuration.level = 0.25
+                configuration.level = 0.12
                 #else
                 configuration.level = preferences.calibrationVolume
                 #endif
