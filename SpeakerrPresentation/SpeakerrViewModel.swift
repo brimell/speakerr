@@ -86,6 +86,7 @@ public final class SpeakerrViewModel {
     private let microphonePermissionProvider: any MicrophonePermissionProviding
     private var pollingTask: Task<Void, Never>?
     private var calibrationTask: Task<Void, Never>?
+    private var calibrationRunID: UInt64 = 0
     private var latestRecheckResidual: Double?
     private var latestRecheckResiduals: [Double] = []
     private var isPaused = false
@@ -225,6 +226,8 @@ public final class SpeakerrViewModel {
             return
         }
         calibrationTask?.cancel()
+        calibrationRunID &+= 1
+        let runID = calibrationRunID
         calibrationOutcome = .none
         calibrationProgress = nil
         latestRecheckResidual = nil
@@ -243,21 +246,29 @@ public final class SpeakerrViewModel {
                 configuration.measurementsPerSpeaker = preferences.measurementsPerSpeaker
                 configuration.level = preferences.calibrationVolume
                 let passes = try await controller.calibrate(inputUID: inputUID, configuration: configuration) { [weak self] update in
-                    Task { @MainActor in self?.calibrationProgress = update }
+                    Task { @MainActor in
+                        guard let self, self.calibrationRunID == runID else { return }
+                        self.calibrationProgress = update
+                    }
                 }
+                guard calibrationRunID == runID else { return }
                 let residuals = passes.last?.relativeArrivalsToReferenceMilliseconds ?? []
                 let residual = (residuals.max() ?? 0) - (residuals.min() ?? 0)
                 calibrationOutcome = .success(residualMilliseconds: residual)
             } catch is CancellationError {
+                guard calibrationRunID == runID else { return }
                 calibrationOutcome = .cancelled
             } catch let error as CalibrationSessionError {
+                guard calibrationRunID == runID else { return }
                 switch error {
                 case .didNotConverge(let residual): calibrationOutcome = .nonConverged(residualMilliseconds: abs(residual), canKeepCurrentAlignment: false)
                 default: calibrationOutcome = .lowConfidence(message: userMessage(for: error))
                 }
             } catch {
+                guard calibrationRunID == runID else { return }
                 present(error)
             }
+            guard calibrationRunID == runID else { return }
             isBusy = false
             await refresh()
         }
