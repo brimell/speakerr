@@ -76,7 +76,7 @@ public struct CalibrationReport: Sendable, Codable, Equatable {
         let finalPass = calibrationPasses.last ?? metadata.passes.last
         let summaries = finalPass?.summariesBySpeaker ?? []
         speakers = metadata.outputNames.enumerated().map { index, name in
-            let summary = summaries.indices.contains(index) ? summaries[index] : nil
+            let summary: RobustMeasurementSummary? = summaries.indices.contains(index) ? summaries[index] : nil
             return Speaker(
                 name: name,
                 uid: metadata.outputUIDs.indices.contains(index) ? metadata.outputUIDs[index] : "",

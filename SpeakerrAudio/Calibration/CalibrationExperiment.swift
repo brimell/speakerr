@@ -157,57 +157,74 @@ public struct CalibrationAttemptDiagnostic: Sendable, Equatable, Codable, Identi
 
 public struct CalibrationPassMeasurements: Sendable, Equatable, Codable {
     public let pass: Int
-    public let measurementsA: [AcousticMeasurement]
-    public let measurementsB: [AcousticMeasurement]
-    public let failures: [String]
-    public let summaryA: RobustMeasurementSummary
-    public let summaryB: RobustMeasurementSummary
-    public let relativeArrivalBMinusAMilliseconds: Double
+    /// All usable candidates; accepted and rejected remain distinguishable.
     public let measurementsBySpeaker: [[AcousticMeasurement]]
-    public let summariesBySpeaker: [RobustMeasurementSummary]
+    public let speakerEstimates: [SpeakerCalibrationEstimate]
+    public let failures: [String]
     public let attempts: [CalibrationAttemptDiagnostic]
+    public var measurementsA: [AcousticMeasurement] { measurementsBySpeaker[0] }
+    public var measurementsB: [AcousticMeasurement] { measurementsBySpeaker[1] }
+    public var acceptedBySpeaker: [[AcousticMeasurement]] { measurementsBySpeaker.map { $0.filter { $0.estimate.accepted } } }
+    public var rejectedBySpeaker: [[AcousticMeasurement]] { measurementsBySpeaker.map { $0.filter { !$0.estimate.accepted } } }
+    public var summariesBySpeaker: [RobustMeasurementSummary?] { speakerEstimates.map(\.summary) }
+    public var summaryA: RobustMeasurementSummary? { summariesBySpeaker[0] }
+    public var summaryB: RobustMeasurementSummary? { summariesBySpeaker[1] }
+    public var relativeArrivalBMinusAMilliseconds: Double {
+        guard let a = summaryA, let b = summaryB else { return .nan }
+        return b.medianMilliseconds - a.medianMilliseconds
+    }
+    public var canApplyCompensation: Bool { speakerEstimates.allSatisfy(\.canApply) }
+    public var quality: CalibrationQuality {
+        if speakerEstimates.contains(where: { $0.quality == .unavailable }) { return .unavailable }
+        if speakerEstimates.contains(where: { $0.quality == .poor }) { return .poor }
+        return speakerEstimates.allSatisfy { $0.quality == .high } ? .high : .provisional
+    }
+    public var residualSpreadMilliseconds: Double? {
+        let arrivals = speakerEstimates.compactMap(\.delayMilliseconds)
+        guard arrivals.count == speakerEstimates.count, let minimum = arrivals.min(), let maximum = arrivals.max() else { return nil }
+        return maximum - minimum
+    }
 
     public init(pass: Int, measurementsA: [AcousticMeasurement], measurementsB: [AcousticMeasurement], failures: [String], attempts: [CalibrationAttemptDiagnostic] = []) throws {
         try self.init(pass: pass, measurementsBySpeaker: [measurementsA, measurementsB], failures: failures, attempts: attempts)
     }
 
-    public init(pass: Int, measurementsBySpeaker: [[AcousticMeasurement]], failures: [String], attempts: [CalibrationAttemptDiagnostic] = []) throws {
+    public init(pass: Int, measurementsBySpeaker: [[AcousticMeasurement]], failures: [String], attempts: [CalibrationAttemptDiagnostic] = [], requiredAcceptedCount: Int = 3) throws {
         guard measurementsBySpeaker.count >= 2 else { throw CalibrationMathError.noMeasurements }
         self.pass = pass
         self.measurementsBySpeaker = measurementsBySpeaker
-        self.summariesBySpeaker = try measurementsBySpeaker.map { try RobustMeasurementSummary(values: $0.map(\.acousticLatencyMilliseconds)) }
-        self.measurementsA = measurementsBySpeaker[0]
-        self.measurementsB = measurementsBySpeaker[1]
+        speakerEstimates = measurementsBySpeaker.map { SpeakerCalibrationEstimate(measurements: $0, requiredAcceptedCount: requiredAcceptedCount) }
         self.failures = failures
-        summaryA = summariesBySpeaker[0]
-        summaryB = summariesBySpeaker[1]
-        relativeArrivalBMinusAMilliseconds = summaryB.medianMilliseconds - summaryA.medianMilliseconds
         self.attempts = attempts
     }
 
     public var relativeArrivalsToReferenceMilliseconds: [Double] {
-        guard let reference = summariesBySpeaker.first?.medianMilliseconds else { return [] }
-        return summariesBySpeaker.map { $0.medianMilliseconds - reference }
+        let arrivals = speakerEstimates.compactMap(\.delayMilliseconds)
+        guard arrivals.count == speakerEstimates.count, let reference = arrivals.first else { return [] }
+        return arrivals.map { $0 - reference }
     }
 
     private enum CodingKeys: String, CodingKey {
-        case pass, measurementsA, measurementsB, failures, summaryA, summaryB
-        case relativeArrivalBMinusAMilliseconds, measurementsBySpeaker, summariesBySpeaker
-        case attempts
+        case pass, measurementsA, measurementsB, failures, measurementsBySpeaker, speakerEstimates, attempts
     }
-
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         pass = try values.decode(Int.self, forKey: .pass)
-        measurementsA = try values.decode([AcousticMeasurement].self, forKey: .measurementsA)
-        measurementsB = try values.decode([AcousticMeasurement].self, forKey: .measurementsB)
+        measurementsBySpeaker = try values.decodeIfPresent([[AcousticMeasurement]].self, forKey: .measurementsBySpeaker)
+            ?? [values.decode([AcousticMeasurement].self, forKey: .measurementsA), values.decode([AcousticMeasurement].self, forKey: .measurementsB)]
+        guard measurementsBySpeaker.count >= 2 else { throw CalibrationMathError.noMeasurements }
+        speakerEstimates = try values.decodeIfPresent([SpeakerCalibrationEstimate].self, forKey: .speakerEstimates)
+            ?? measurementsBySpeaker.map { SpeakerCalibrationEstimate(measurements: $0) }
         failures = try values.decode([String].self, forKey: .failures)
-        summaryA = try values.decode(RobustMeasurementSummary.self, forKey: .summaryA)
-        summaryB = try values.decode(RobustMeasurementSummary.self, forKey: .summaryB)
-        relativeArrivalBMinusAMilliseconds = try values.decode(Double.self, forKey: .relativeArrivalBMinusAMilliseconds)
-        measurementsBySpeaker = try values.decodeIfPresent([[AcousticMeasurement]].self, forKey: .measurementsBySpeaker) ?? [measurementsA, measurementsB]
-        summariesBySpeaker = try values.decodeIfPresent([RobustMeasurementSummary].self, forKey: .summariesBySpeaker) ?? [summaryA, summaryB]
         attempts = try values.decodeIfPresent([CalibrationAttemptDiagnostic].self, forKey: .attempts) ?? []
+    }
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(pass, forKey: .pass)
+        try values.encode(measurementsBySpeaker, forKey: .measurementsBySpeaker)
+        try values.encode(speakerEstimates, forKey: .speakerEstimates)
+        try values.encode(failures, forKey: .failures)
+        try values.encode(attempts, forKey: .attempts)
     }
 }
 

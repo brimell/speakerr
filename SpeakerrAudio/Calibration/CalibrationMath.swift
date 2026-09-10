@@ -93,3 +93,75 @@ public struct ConvergenceController: Sendable {
         residuals.last.map { abs($0) <= targetResidualMilliseconds } ?? false
     }
 }
+
+public enum CalibrationQuality: String, Sendable, Codable, Equatable {
+    case high, provisional, poor, unavailable
+}
+
+public struct SpeakerCalibrationEstimate: Sendable, Codable, Equatable {
+    public let delayMilliseconds: Double?
+    public let quality: CalibrationQuality
+    public let confidence: Double
+    public let measurementCount: Int
+    public let acceptedMeasurementCount: Int
+    public let summary: RobustMeasurementSummary?
+    public let clusterMembers: [Double]
+    public let excludedOutliers: [Double]
+    public let medianProminence: Double
+    public let method: String
+    public var canApply: Bool { quality == .high || quality == .provisional }
+
+    /// Maximum cluster diameter, not single-link distance: chains cannot bridge outliers.
+    /// 3 ms allows a small timing spread without depending on a particular speaker latency.
+    public init(measurements: [AcousticMeasurement], requiredAcceptedCount: Int = 3, clusterToleranceMilliseconds: Double = 3) {
+        let candidates = measurements.filter { $0.acousticLatencyMilliseconds.isFinite && $0.estimate.confidence.isFinite && $0.estimate.peakValue.isFinite && $0.estimate.peakProminence.isFinite }
+        let accepted = candidates.filter { $0.estimate.accepted }
+        measurementCount = candidates.count
+        acceptedMeasurementCount = accepted.count
+        var chosen: [AcousticMeasurement] = []
+        var supporting: [AcousticMeasurement] = []
+        if !accepted.isEmpty {
+            chosen = accepted
+            let center = try! RobustMeasurementSummary(values: accepted.map(\.acousticLatencyMilliseconds)).medianMilliseconds
+            supporting = candidates.filter { !$0.estimate.accepted && abs($0.acousticLatencyMilliseconds - center) <= clusterToleranceMilliseconds / 2 }
+            quality = accepted.count >= requiredAcceptedCount ? .high : .provisional
+            method = "acceptedMedian"
+        } else {
+            let sorted = candidates.sorted { $0.acousticLatencyMilliseconds < $1.acousticLatencyMilliseconds }
+            var clusters: [[AcousticMeasurement]] = []
+            for start in sorted.indices {
+                let cluster = Array(sorted[start...].prefix { $0.acousticLatencyMilliseconds - sorted[start].acousticLatencyMilliseconds <= clusterToleranceMilliseconds })
+                clusters.append(cluster)
+            }
+            let largest = clusters.max { lhs, rhs in
+                if lhs.count != rhs.count { return lhs.count < rhs.count }
+                return lhs.map { Self.score($0.estimate) }.reduce(0, +) < rhs.map { Self.score($0.estimate) }.reduce(0, +)
+            } ?? []
+            // A tied, disjoint cluster is ambiguous. Require a strict majority as well as two observations.
+            if largest.count >= 2 && largest.count * 2 > candidates.count {
+                chosen = largest
+                quality = .provisional
+                method = "clusterMedian"
+            } else if let best = candidates.max(by: { Self.score($0.estimate) < Self.score($1.estimate) }) {
+                chosen = [best]
+                quality = .poor
+                method = "strongestRawCandidate"
+            } else {
+                quality = .unavailable
+                method = "noEstimate"
+            }
+        }
+        summary = try? RobustMeasurementSummary(values: chosen.map(\.acousticLatencyMilliseconds))
+        delayMilliseconds = summary?.medianMilliseconds
+        confidence = (try? RobustMeasurementSummary(values: chosen.map(\.estimate.confidence)).medianMilliseconds) ?? 0
+        medianProminence = (try? RobustMeasurementSummary(values: chosen.map(\.estimate.peakProminence)).medianMilliseconds) ?? 0
+        clusterMembers = (chosen + supporting).map(\.acousticLatencyMilliseconds)
+        excludedOutliers = candidates.filter { !chosen.contains($0) && !supporting.contains($0) }.map(\.acousticLatencyMilliseconds)
+    }
+
+    private static func score(_ estimate: DelayEstimate) -> Double {
+        let consistency = estimate.abLatencyDifferenceMilliseconds.map { 1 / (1 + abs($0)) } ?? 0
+        return 0.45 * estimate.confidence + 0.25 * min(1, max(0, estimate.peakProminence - 1) / 0.5)
+            + 0.2 * min(1, abs(estimate.peakValue)) + 0.1 * consistency
+    }
+}

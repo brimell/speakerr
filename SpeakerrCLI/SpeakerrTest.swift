@@ -307,8 +307,9 @@ struct SpeakerrTest {
             print("    paired relative B-A=\(String(format: "%+.2f", relative)) ms")
         }
         for failure in pass.failures { print("  rejected: \(failure)") }
-        print("  \(outputs[0].name): median=\(String(format: "%.2f", pass.summaryA.medianMilliseconds)) ms spread=\(String(format: "%.2f", pass.summaryA.spreadMilliseconds)) ms MAD=\(String(format: "%.2f", pass.summaryA.medianAbsoluteDeviationMilliseconds)) ms")
-        print("  \(outputs[1].name): median=\(String(format: "%.2f", pass.summaryB.medianMilliseconds)) ms spread=\(String(format: "%.2f", pass.summaryB.spreadMilliseconds)) ms MAD=\(String(format: "%.2f", pass.summaryB.medianAbsoluteDeviationMilliseconds)) ms")
+        for (index, estimate) in pass.speakerEstimates.enumerated() {
+            print("  \(outputs[index].name): arrival=\(estimate.delayMilliseconds.map { String(format: "%.2f", $0) } ?? "unavailable") ms quality=\(estimate.quality.rawValue) method=\(estimate.method)")
+        }
         let relative = pass.relativeArrivalBMinusAMilliseconds
         print("  Relative B-A: \(String(format: "%+.2f", relative)) ms (\(relative >= 0 ? outputs[0].name + " arrives earlier" : outputs[1].name + " arrives earlier"))")
     }
