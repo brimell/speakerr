@@ -85,13 +85,9 @@ struct CalibrationSheet: View {
                 .foregroundStyle(.secondary)
         } else if model.isBusy || model.presentation.status == .calibrating {
             Text("Calibrating Speakers").font(.title2.weight(.semibold))
-            HStack(spacing: 10) {
-                ProgressView().controlSize(.small)
-                Text(model.calibrationProgress.map(calibrationPhaseText) ?? "Preparing calibration…")
-            }
-            if let progress = model.calibrationProgress?.progressFraction {
-                ProgressView(value: progress)
-            }
+            Text(model.calibrationProgress.map(calibrationPhaseText) ?? "Preparing calibration…")
+                .foregroundStyle(.secondary)
+            calibrationProgressView(model.calibrationProgress)
             Text("Keep the Mac near your listening position.")
                 .foregroundStyle(.secondary)
         } else {

@@ -201,8 +201,10 @@ private struct CalibrationSummaryView: View {
             Text("Ready to calibrate").font(.headline)
             Text("Place this Mac near your normal listening position.").foregroundStyle(.secondary)
         case .running(let progress):
-            ProgressView()
-            Text(progress.map(calibrationPhaseText) ?? "Preparing calibration…")
+            VStack(alignment: .leading, spacing: 8) {
+                Text(progress.map(calibrationPhaseText) ?? "Preparing calibration…")
+                calibrationProgressView(progress)
+            }
         case .failed(let outcome):
             Text(calibrationOutcomeText(outcome)).foregroundStyle(.secondary)
         case .unavailable:
@@ -270,10 +272,29 @@ func transportName(_ transport: TransportType) -> String {
 
 func calibrationPhaseText(_ update: CalibrationProgressUpdate) -> String {
     switch update.phase {
-    case .measuring(_, let name, let pass, let totalPasses, let measurement, let totalMeasurements):
-        "Measuring \(name) — measurement \(measurement) of \(totalMeasurements), calibration pass \(pass) of \(totalPasses)"
+    case .measuring(_, let name, _, _, _, _):
+        "Measuring \(name)…"
     case .applyingCorrection: "Applying correction…"
-    case .verifying(let pass): "Verifying alignment — calibration pass \(pass)…"
+    case .verifying: "Verifying alignment…"
+    }
+}
+
+@ViewBuilder
+func calibrationProgressView(_ update: CalibrationProgressUpdate?) -> some View {
+    if let update, let fraction = calibrationProgressFraction(update) {
+        ProgressView(value: fraction)
+    } else {
+        ProgressView()
+    }
+}
+
+func calibrationProgressFraction(_ update: CalibrationProgressUpdate) -> Double? {
+    switch update.phase {
+    case .measuring(_, _, _, _, let measurement, let totalMeasurements):
+        guard totalMeasurements > 0 else { return nil }
+        return min(1, max(0, Double(measurement) / Double(totalMeasurements)))
+    case .applyingCorrection, .verifying:
+        return nil
     }
 }
 
