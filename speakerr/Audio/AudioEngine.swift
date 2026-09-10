@@ -110,7 +110,6 @@ class AudioEngine: ObservableObject {
     init() {
         registerHardwareDeviceListener()
         registerDefaultOutputDeviceListener()
-        enforceBlackHoleAsDefaultOutput()
     }
 
     deinit {
@@ -324,7 +323,7 @@ class AudioEngine: ObservableObject {
         let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
             guard let self else { return }
             DispatchQueue.main.async {
-                self.enforceBlackHoleAsDefaultOutput()
+                self.enforceSelectedInputAsDefaultOutput()
             }
         }
 
@@ -362,18 +361,21 @@ class AudioEngine: ObservableObject {
         defaultOutputDeviceChangedListener = nil
     }
 
-    private func enforceBlackHoleAsDefaultOutput() {
+    private func enforceSelectedInputAsDefaultOutput() {
+        // This is checked when the queued notification executes, not when it
+        // arrives. A stopped single-speaker engine no longer owns system audio.
+        guard isRunning, let selectedInputDeviceID else { return }
         deviceManager.refreshDevices()
-        guard let blackHoleOutput = deviceManager.outputDevices.first(where: { $0.name.lowercased().contains("blackhole") }) else {
+        guard let inputOutput = deviceManager.outputDevices.first(where: { $0.id == selectedInputDeviceID }) else {
             return
         }
 
         if let currentDefaultOutput = deviceManager.getDefaultOutputDevice(),
-           currentDefaultOutput == blackHoleOutput.id {
+           currentDefaultOutput == inputOutput.id {
             return
         }
 
-        _ = setSystemDefaultOutputDevice(blackHoleOutput.id)
+        _ = setSystemDefaultOutputDevice(inputOutput.id)
     }
 
     @discardableResult
@@ -406,14 +408,14 @@ class AudioEngine: ObservableObject {
         )
 
         if status != noErr {
-            print("Failed to set default output to BlackHole (status: \(status))")
+            print("Failed to set default output to selected input (status: \(status))")
         }
 
         return status == noErr
     }
 
     private func handleOutputDeviceListChanged() {
-        guard let selectedOutputDeviceID else { return }
+        guard isRunning, let selectedOutputDeviceID else { return }
 
         deviceManager.refreshDevices()
         let outputStillConnected = deviceManager.outputDevices.contains { $0.id == selectedOutputDeviceID }
@@ -550,6 +552,7 @@ class AudioEngine: ObservableObject {
             }
 
             isRunning = true
+            enforceSelectedInputAsDefaultOutput()
             errorMessage = nil
             startUIPublishTimer()
 
@@ -875,8 +878,8 @@ class AudioEngine: ObservableObject {
     }
 
     func stop() {
-        cleanup()
         isRunning = false
+        cleanup()
     }
 
     private func cleanup() {

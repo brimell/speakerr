@@ -23,7 +23,12 @@ struct ContentView: View {
     @StateObject private var presetManager = PresetManager()
 
     @State private var selectedInputID: AudioDeviceID?
-    @State private var selectedOutputDeviceUIDs: [String] = []
+    private var selectedOutputDeviceUIDs: [String] {
+        get { SpeakerrStore.playback?.selectedOutputUIDs ?? [] }
+        nonmutating set { SpeakerrStore.playback?.selectOutputs(newValue) }
+    }
+
+    private var playbackIsRunning: Bool { SpeakerrStore.playback?.isRunning ?? false }
     @State private var outputVolumes: [String: Float] = [:]
     @State private var selectedEQTargetUID: String = "master"
     @State private var shortcutOutputDeviceUIDs: [String] = []
@@ -48,8 +53,9 @@ struct ContentView: View {
     private let autoEQManager = AutoEQManager.shared
 
     private var selectedOutputDevices: [AudioDevice] {
-        let uids = Set(selectedOutputDeviceUIDs)
-        return deviceManager.outputDevices.filter { uids.contains($0.uid) }
+        selectedOutputDeviceUIDs.compactMap { uid in
+            deviceManager.outputDevices.first(where: { $0.uid == uid })
+        }
     }
 
     private var selectedOutputsSummaryText: String {
@@ -144,10 +150,11 @@ struct ContentView: View {
             applyLatencySettingsToEngine()
             persistLatencySettings()
         }
-        .onReceive(audioEngine.$selectedInputDeviceID) { newDeviceID in
-            if selectedInputID != newDeviceID {
-                selectedInputID = newDeviceID
-            }
+        .onChange(of: SpeakerrStore.playback?.inputUID) { _ in
+            synchronizeSelectedInput()
+        }
+        .onChange(of: selectedOutputDeviceUIDs) { _ in
+            applyOutputDevicesSelection()
         }
         .onChange(of: eqModel.parametricBands) { _ in
             syncEQToEngine()
@@ -178,14 +185,6 @@ struct ContentView: View {
         }
         .onChange(of: presetManager.customPresets) { newPresets in
             eqModel.resolvePresetSelection(using: newPresets)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("speakerrOutputDevicesChanged"))) { _ in
-            if let savedUIDs = settingsStore.load()?.selectedOutputDeviceUIDs {
-                if savedUIDs != selectedOutputDeviceUIDs {
-                    selectedOutputDeviceUIDs = savedUIDs
-                    applyOutputDevicesSelection()
-                }
-            }
         }
         .sheet(isPresented: $showingSavePreset) {
             savePresetSheet
@@ -1306,10 +1305,8 @@ struct ContentView: View {
                 .labelsHidden()
                 .help("Select BlackHole 2ch to capture system audio")
                 .onChange(of: selectedInputID) { newDevice in
-                    if let deviceID = newDevice {
-                        audioEngine.setInputDevice(deviceID)
-                    }
-                    persistSelectedDevices()
+                    let uid = deviceManager.inputDevices.first(where: { $0.id == newDevice })?.uid
+                    SpeakerrStore.playback?.selectInput(uid)
                 }
             }
 
@@ -1547,7 +1544,7 @@ struct ContentView: View {
                 updateBanner(version: version, dmgURL: dmgURL)
             }
 
-            if let error = audioEngine.errorMessage {
+            if let error = SpeakerrStore.playback?.errorMessage ?? audioEngine.errorMessage {
                 Text(error)
                     .font(.caption)
                     .foregroundColor(.red)
@@ -1672,15 +1669,11 @@ struct ContentView: View {
 
                 Spacer()
 
-                Button(audioEngine.isRunning ? "Stop" : "Start") {
-                    if audioEngine.isRunning {
-                        audioEngine.stop()
-                    } else {
-                        audioEngine.start()
-                    }
+                Button(playbackIsRunning ? "Stop" : "Start") {
+                    SpeakerrStore.playback?.togglePlayback()
                 }
                 .buttonStyle(.borderedProminent)
-                .help(audioEngine.isRunning ? "Stop audio processing" : "Start audio processing")
+                .help(playbackIsRunning ? "Stop audio processing" : "Start audio processing")
 
                 Button("Quit") {
                     NSApplication.shared.terminate(nil)
@@ -1729,12 +1722,8 @@ struct ContentView: View {
                 }
                 .disabled(!eqModel.hasCompareB)
 
-                Button(audioEngine.isRunning ? "Stop" : "Start") {
-                    if audioEngine.isRunning {
-                        audioEngine.stop()
-                    } else {
-                        audioEngine.start()
-                    }
+                Button(playbackIsRunning ? "Stop" : "Start") {
+                    SpeakerrStore.playback?.togglePlayback()
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -1767,10 +1756,10 @@ struct ContentView: View {
     private var statusIndicator: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(audioEngine.isRunning ? Color.green : Color.red)
+                .fill(playbackIsRunning ? Color.green : Color.red)
                 .frame(width: 8, height: 8)
 
-            Text(audioEngine.isRunning ? "Running" : "Stopped")
+            Text(SpeakerrStore.playback?.isBusy == true ? "Switching…" : (playbackIsRunning ? "Running" : "Stopped"))
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -1846,12 +1835,10 @@ struct ContentView: View {
         } else {
             selectedOutputDeviceUIDs[1] = device.uid
         }
-        applyOutputDevicesSelection()
     }
 
     private func clearOutputDevices() {
         selectedOutputDeviceUIDs.removeAll()
-        applyOutputDevicesSelection()
     }
 
     private func switchEQTarget(to target: String) {
@@ -1867,33 +1854,18 @@ struct ContentView: View {
     }
 
     private func applyOutputDevicesSelection() {
-        persistSelectedDevices()
+        deviceManager.refreshDevices()
         syncOutputVolumes()
 
         if selectedOutputDeviceUIDs.count == 1 {
-            SpeakerrStore.model.pause()
             if let device = deviceManager.outputDevices.first(where: { $0.uid == selectedOutputDeviceUIDs[0] }) {
-                audioEngine.setOutputDevice(device.id)
                 selectedEQTargetUID = device.uid
                 eqModel.onDeviceChanged(deviceUID: device.uid, deviceName: device.name)
                 eqModel.resolvePresetSelection(using: presetManager.customPresets)
                 syncEQToEngine()
-                if !audioEngine.isRunning, audioEngine.selectedInputDeviceID != nil {
-                    audioEngine.start()
-                }
             }
 
         } else if selectedOutputDeviceUIDs.count == 2 {
-            audioEngine.stop()
-
-            if SpeakerrStore.model.preferences.programmeInputUID == nil,
-               let inputID = selectedInputID,
-               let inputDevice = deviceManager.inputDevices.first(where: { $0.id == inputID }) {
-                SpeakerrStore.model.preferences.programmeInputUID = inputDevice.uid
-            }
-
-            SpeakerrStore.model.useSelectedSpeakers(selectedOutputDeviceUIDs)
-
             let validTargets = ["master", selectedOutputDeviceUIDs[0], selectedOutputDeviceUIDs[1]]
             if !validTargets.contains(selectedEQTargetUID) {
                 selectedEQTargetUID = "master"
@@ -1901,8 +1873,6 @@ struct ContentView: View {
             switchEQTarget(to: selectedEQTargetUID)
             preloadSpeakerrEQBands()
         } else {
-            audioEngine.stop()
-            SpeakerrStore.model.pause()
             selectedEQTargetUID = "master"
         }
     }
@@ -1914,7 +1884,7 @@ struct ContentView: View {
     private func setOutputVolume(_ volume: Float, for device: AudioDevice, route: Int) {
         let clamped = min(max(volume, 0), 1)
         outputVolumes[device.uid] = clamped
-        if selectedOutputDevices.count == 2 {
+        if selectedOutputDeviceUIDs.count == 2, let route = selectedOutputDeviceUIDs.firstIndex(of: device.uid) {
             SpeakerrStore.model.updateRouteVolume(route: route, volume: clamped)
         } else {
             eqModel.setVolume(clamped)
@@ -1931,8 +1901,9 @@ struct ContentView: View {
                 (device.uid, DeviceProfileManager.shared.profile(for: device.uid)?.volume ?? 1.0)
             }
         )
-        guard selectedOutputDevices.count == 2 else { return }
-        for (route, device) in selectedOutputDevices.enumerated() {
+        guard selectedOutputDeviceUIDs.count == 2 else { return }
+        for device in selectedOutputDevices {
+            guard let route = selectedOutputDeviceUIDs.firstIndex(of: device.uid) else { continue }
             SpeakerrStore.model.updateRouteVolume(route: route, volume: outputVolume(for: device))
         }
     }
@@ -2001,22 +1972,15 @@ struct ContentView: View {
     }
 
     private func autoSelectDevicesAndStart() {
-        restoreSavedDeviceSelections(force: false)
+        // Playback belongs to the application, not a window's appearance.
+        synchronizeSelectedInput()
+        applyOutputDevicesSelection()
+    }
 
-        if selectedInputID == nil, let blackhole = deviceManager.findBlackHole() {
-            selectedInputID = blackhole.id
-            audioEngine.setInputDevice(blackhole.id)
-        }
-
-        if selectedOutputDeviceUIDs.count == 2 {
-            applyOutputDevicesSelection()
-        } else if selectedOutputDeviceUIDs.count == 1 {
-            if !audioEngine.isRunning,
-               audioEngine.selectedInputDeviceID != nil,
-               audioEngine.selectedOutputDeviceID != nil {
-                audioEngine.start()
-            }
-        }
+    private func synchronizeSelectedInput() {
+        deviceManager.refreshDevices()
+        let uid = SpeakerrStore.playback?.inputUID
+        selectedInputID = deviceManager.inputDevices.first(where: { $0.uid == uid })?.id
     }
 
     private func openAdvancedWindow() {
@@ -2031,43 +1995,15 @@ struct ContentView: View {
     }
 
     private func restoreSavedDeviceSelections(force: Bool = false) {
-        guard let settings = settingsStore.load() else { return }
-
-        if (force || selectedInputID == nil), let savedInputID = settings.selectedInputDeviceID {
-            let inputID = AudioDeviceID(savedInputID)
-            if deviceManager.inputDevices.contains(where: { $0.id == inputID }) {
-                selectedInputID = inputID
-                audioEngine.setInputDevice(inputID)
-            }
-        }
-
-        if let savedUIDs = settings.selectedOutputDeviceUIDs, !savedUIDs.isEmpty {
-            let availableUIDs = Set(deviceManager.outputDevices.map(\.uid))
-            let validUIDs = savedUIDs.filter { availableUIDs.contains($0) }
-            if !validUIDs.isEmpty {
-                selectedOutputDeviceUIDs = validUIDs
-                applyOutputDevicesSelection()
-                return
-            }
-        }
-
-        if (force || audioEngine.selectedOutputDeviceID == nil), let savedOutputID = settings.selectedOutputDeviceID {
-            let outputID = AudioDeviceID(savedOutputID)
-            if let matchedDevice = deviceManager.outputDevices.first(where: { $0.id == outputID }) {
-                selectedOutputDeviceUIDs = [matchedDevice.uid]
-                applyOutputDevicesSelection()
-            }
-        }
+        if force { SpeakerrStore.restoreSelection() }
+        synchronizeSelectedInput()
+        applyOutputDevicesSelection()
     }
 
     private func persistSelectedDevices() {
         settingsStore.update { settings in
-            settings.selectedInputDeviceID = selectedInputID.map { Int32($0) }
-            settings.selectedOutputDeviceID = audioEngine.selectedOutputDeviceID.map { Int32($0) }
-            settings.selectedOutputDeviceUIDs = selectedOutputDeviceUIDs.isEmpty ? nil : selectedOutputDeviceUIDs
             settings.shortcutOutputDeviceUIDs = shortcutOutputDeviceUIDs.isEmpty ? nil : shortcutOutputDeviceUIDs
         }
-        SpeakerrStore.model.preferences.selectedSpeakerUIDs = selectedOutputDeviceUIDs.count == 2 ? selectedOutputDeviceUIDs : []
     }
 
     private func exportSettingsBackup() {
@@ -2133,14 +2069,13 @@ struct ContentView: View {
     }
 
     private func cycleToNextOutputDevice() {
-        let currentDeviceID = audioEngine.selectedOutputDeviceID
+        let currentDeviceID = selectedOutputDevices.first?.id
         guard let nextDevice = deviceManager.nextOutputDevice(
             after: currentDeviceID,
             preferredUIDs: shortcutOutputDeviceUIDs
         ) else { return }
 
         selectedOutputDeviceUIDs = [nextDevice.uid]
-        applyOutputDevicesSelection()
     }
 
     private var shortcutTargetsMenu: some View {
@@ -2239,17 +2174,7 @@ struct ContentView: View {
 
     private func refreshOutputDevices() {
         deviceManager.refreshDevices()
-        let availableUIDs = Set(deviceManager.outputDevices.map(\.uid))
-        let remaining = selectedOutputDeviceUIDs.filter { availableUIDs.contains($0) }
-        if remaining != selectedOutputDeviceUIDs {
-            selectedOutputDeviceUIDs = remaining
-            if selectedOutputDeviceUIDs.isEmpty,
-               let fallbackDeviceID = deviceManager.getDefaultOutputDevice(),
-               let fallbackDevice = deviceManager.outputDevices.first(where: { $0.id == fallbackDeviceID }) {
-                selectedOutputDeviceUIDs = [fallbackDevice.uid]
-            }
-            applyOutputDevicesSelection()
-        }
+        Task { await SpeakerrStore.model.refresh() }
     }
 
     private func importEQFile(_ result: Result<[URL], Error>) {

@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
+import SpeakerrPresentation
 
+@MainActor
 final class TrayController: NSObject {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
@@ -78,7 +80,7 @@ final class TrayController: NSObject {
     private func buildContextMenu() -> NSMenu {
         let menu = NSMenu()
 
-        let statusTitle = audioEngine.isRunning ? "● Running" : "○ Stopped"
+        let statusTitle = SpeakerrStore.playback?.isRunning == true ? "● Running" : "○ Stopped"
         let statusMenuItem = NSMenuItem(title: statusTitle, action: nil, keyEquivalent: "")
         statusMenuItem.isEnabled = false
         menu.addItem(statusMenuItem)
@@ -99,7 +101,7 @@ final class TrayController: NSObject {
         menu.addItem(.separator())
 
         addItem(to: menu,
-                title: audioEngine.isRunning ? "Stop Audio Engine" : "Start Audio Engine",
+                title: SpeakerrStore.playback?.isRunning == true ? "Stop Audio Engine" : "Start Audio Engine",
                 action: #selector(toggleAudio))
 
         addItem(to: menu, title: "Switch Output Device", action: #selector(cycleOutput))
@@ -141,21 +143,17 @@ final class TrayController: NSObject {
     }
 
     @objc private func toggleAudio() {
-        if audioEngine.isRunning {
-            audioEngine.stop()
-        } else {
-            audioEngine.start()
-        }
+        SpeakerrStore.playback?.togglePlayback()
     }
 
     @objc private func cycleOutput() {
         let preferredUIDs = AppSettingsStore.shared.load()?.shortcutOutputDeviceUIDs
+        let selectedUID = SpeakerrStore.playback?.selectedOutputUIDs.first
         guard let nextDevice = deviceManager.nextOutputDevice(
-            after: audioEngine.selectedOutputDeviceID,
+            after: deviceManager.outputDevices.first(where: { $0.uid == selectedUID })?.id,
             preferredUIDs: preferredUIDs
         ) else { return }
-        audioEngine.setOutputDevice(nextDevice.id)
-        AppSettingsStore.shared.update { $0.selectedOutputDeviceID = Int32(nextDevice.id) }
+        SpeakerrStore.playback?.selectOutputs([nextDevice.uid])
     }
 
     @MainActor @objc private func openSpeakerAlignmentAction() {

@@ -20,7 +20,7 @@ struct SettingsView: View {
                 Picker("Default microphone", selection: Binding(get: { model.preferences.preferredMicrophoneUID ?? "" }, set: { model.preferences.preferredMicrophoneUID = $0 })) {
                     ForEach(model.availableInputs) { input in Text(input.name).tag(input.id) }
                 }
-                Picker("System audio device", selection: Binding(get: { model.preferences.programmeInputUID ?? "" }, set: { model.preferences.programmeInputUID = $0 })) {
+                Picker("System audio device", selection: Binding(get: { model.preferences.programmeInputUID ?? "" }, set: { model.selectProgrammeInput($0.isEmpty ? nil : $0) })) {
                     ForEach(model.availableInputs.filter { input in model.availableOutputs.contains(where: { $0.id == input.id }) }) { input in
                         Text(input.name).tag(input.id)
                     }

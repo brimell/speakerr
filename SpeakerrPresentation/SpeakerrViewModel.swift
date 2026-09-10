@@ -81,6 +81,7 @@ public final class SpeakerrViewModel {
     public var isDiagnosticsPresented = false
 
     public let preferences: SpeakerrPreferences
+    @ObservationIgnored public weak var playbackCoordinator: PlaybackCoordinator?
     private let controller: any SpeakerSessionControlling
     private let microphonePermissionProvider: any MicrophonePermissionProviding
     private var pollingTask: Task<Void, Never>?
@@ -116,12 +117,15 @@ public final class SpeakerrViewModel {
             if preferences.preferredMicrophoneUID == nil {
                 preferences.preferredMicrophoneUID = snapshot.availableInputs.first(where: { $0.transport == .builtIn })?.id
             }
-            if preferences.programmeInputUID == nil {
+            if playbackCoordinator == nil, preferences.programmeInputUID == nil {
                 preferences.programmeInputUID = snapshot.availableInputs.first(where: { input in
-                    input.transport == .virtual && snapshot.availableOutputs.contains(where: { $0.id == input.id })
+                    input.name.localizedCaseInsensitiveContains("BlackHole") && snapshot.availableOutputs.contains(where: { $0.id == input.id })
                 })?.id
             }
             map(snapshot)
+            if let message = playbackCoordinator?.errorMessage {
+                presentPlaybackError(NSError(domain: "SpeakerrPlayback", code: 1, userInfo: [NSLocalizedDescriptionKey: message]))
+            }
         } catch {
             presentation.status = .audioError
             presentation.statusDetail = "Speakerr could not read the current audio devices."
@@ -137,9 +141,22 @@ public final class SpeakerrViewModel {
 
     public func useSelectedSpeakers(_ uids: [String]) {
         guard uids.count == 2 else { return }
-        preferences.selectedSpeakerUIDs = uids
         isSpeakerSelectionPresented = false
+        if let playbackCoordinator {
+            playbackCoordinator.selectOutputs(uids)
+            return
+        }
+        preferences.selectedSpeakerUIDs = uids
         start()
+    }
+
+    public func selectProgrammeInput(_ uid: String?) {
+        if let playbackCoordinator {
+            playbackCoordinator.selectInput(uid)
+        } else {
+            preferences.programmeInputUID = uid
+            if presentation.playback.isActive { start() }
+        }
     }
 
     public func setRoutingMode(_ mode: SpeakerRoutingMode) {
@@ -151,35 +168,53 @@ public final class SpeakerrViewModel {
     }
 
     public func start() {
+        if let playbackCoordinator {
+            playbackCoordinator.start()
+            return
+        }
         guard preferences.selectedSpeakerUIDs.count == 2 else {
             isSpeakerSelectionPresented = true
             return
         }
-        isPaused = false
-        isBusy = true
+        let outputs = preferences.selectedSpeakerUIDs
+        let input = preferences.programmeInputUID
+        let level = preferences.calibrationVolume
+        let mode = preferences.routingMode
         Task {
             do {
-                try await controller.start(outputUIDs: preferences.selectedSpeakerUIDs, programmeInputUID: preferences.programmeInputUID, calibrationLevel: preferences.calibrationVolume, routingMode: preferences.routingMode)
-                calibrationOutcome = .none
+                try await startSession(outputUIDs: outputs, inputUID: input, calibrationLevel: level, routingMode: mode)
             } catch {
                 present(error)
             }
-            isBusy = false
-            await refresh()
         }
     }
 
     public func pause() {
+        if let playbackCoordinator {
+            playbackCoordinator.stop()
+            return
+        }
+        Task { await pauseSession() }
+    }
+
+    func startSession(outputUIDs: [String], inputUID: String?, calibrationLevel: Double, routingMode: SpeakerRoutingMode) async throws {
+        isPaused = false
+        isBusy = true
+        defer { isBusy = false }
+        try await controller.start(outputUIDs: outputUIDs, programmeInputUID: inputUID, calibrationLevel: calibrationLevel, routingMode: routingMode)
+        calibrationOutcome = .none
+        await refresh()
+    }
+
+    func pauseSession() async {
         let activeCalibration = calibrationTask
         activeCalibration?.cancel()
         isPaused = true
         isBusy = true
-        Task {
-            await activeCalibration?.value
-            await controller.stop()
-            isBusy = false
-            await refresh()
-        }
+        await activeCalibration?.value
+        await controller.stop()
+        isBusy = false
+        await refresh()
     }
 
     public func calibrate() {
@@ -285,8 +320,12 @@ public final class SpeakerrViewModel {
 
     public func shutdown() async {
         pollingTask?.cancel()
-        calibrationTask?.cancel()
-        await controller.stop()
+        if let playbackCoordinator {
+            playbackCoordinator.stop()
+            await playbackCoordinator.waitForTransition()
+        } else {
+            await pauseSession()
+        }
     }
 
     private func map(_ snapshot: SessionControllerSnapshot) {
@@ -310,7 +349,7 @@ public final class SpeakerrViewModel {
             statusDetail: detail(for: status.state, speakers: speakers),
             speakers: speakers,
             calibration: PresentationStateMapper.calibration(for: status.state, snapshot: status.calibration, calibrationIsValid: valid, progress: calibrationProgress, outcome: calibrationOutcome),
-            playback: .init(isActive: !isPaused, isProgrammeAttached: snapshot.isProgrammeAttached, statusText: snapshot.isProgrammeAttached ? "Active" : "Ready"),
+            playback: .init(isActive: !isPaused && speakers.allSatisfy(\.isConnected) && status.renderError == nil && status.state != .idle && status.state != .rebuilding, isProgrammeAttached: snapshot.isProgrammeAttached, statusText: snapshot.isProgrammeAttached ? "Active" : "Ready"),
             generation: status.generation,
             sampleRate: status.sampleRate,
             transport: status.transport,
@@ -344,6 +383,11 @@ public final class SpeakerrViewModel {
         presentation.status = .audioError
         presentation.statusDetail = userMessage(for: error)
         presentation.technicalError = error.localizedDescription
+    }
+
+    func presentPlaybackError(_ error: Error) {
+        present(error)
+        presentation.playback = .init(isActive: false, isProgrammeAttached: false, statusText: "Stopped")
     }
 
     private func userMessage(for error: Error) -> String {

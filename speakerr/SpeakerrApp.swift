@@ -111,6 +111,7 @@ struct SpeakerrApp: App {
         _audioEngine = StateObject(wrappedValue: engine)
         _eqModel = StateObject(wrappedValue: model)
         _updateChecker = StateObject(wrappedValue: checker)
+        SpeakerrStore.configurePlayback(audioEngine: engine)
         crashRelaunchManager = CrashRelaunchManager()
         outputSwitchShortcutManager = shortcutManager
         trayController = TrayController(audioEngine: engine, eqModel: model, updateChecker: checker)
@@ -126,7 +127,6 @@ struct SpeakerrApp: App {
             let speakerrModel = SpeakerrStore.model
             speakerrModel.beginMonitoring()
             await speakerrModel.refresh()
-            speakerrModel.startSavedSessionIfNeeded()
         }
     }
 
@@ -166,7 +166,6 @@ struct SpeakerrApp: App {
 
     private static func startAudioServiceIfPossible(audioEngine: AudioEngine, eqModel: EQModel) {
         let settingsStore = AppSettingsStore.shared
-        let deviceManager = AudioDeviceManager()
 
         applyEQModelToAudioEngine(audioEngine: audioEngine, eqModel: eqModel)
 
@@ -177,43 +176,9 @@ struct SpeakerrApp: App {
                 latencyTargetMultiplier: UInt32(max(1, settings.latencyTargetMultiplier))
             )
 
-            if let savedInputID = settings.selectedInputDeviceID {
-                let inputID = AudioDeviceID(savedInputID)
-                if deviceManager.inputDevices.contains(where: { $0.id == inputID }) {
-                    audioEngine.setInputDevice(inputID)
-                }
-            }
-
-            if let savedOutputID = settings.selectedOutputDeviceID {
-                let outputID = AudioDeviceID(savedOutputID)
-                if deviceManager.outputDevices.contains(where: { $0.id == outputID }) {
-                    audioEngine.setOutputDevice(outputID)
-                }
-            }
         }
-
-        if audioEngine.selectedInputDeviceID == nil,
-           let blackHole = deviceManager.findBlackHole() {
-            audioEngine.setInputDevice(blackHole.id)
-        }
-
-        if audioEngine.selectedOutputDeviceID == nil,
-           let defaultOutput = deviceManager.getDefaultOutputDevice() {
-            audioEngine.setOutputDevice(defaultOutput)
-        }
-
-        settingsStore.update { settings in
-            settings.selectedInputDeviceID = audioEngine.selectedInputDeviceID.map { Int32($0) }
-            settings.selectedOutputDeviceID = audioEngine.selectedOutputDeviceID.map { Int32($0) }
-        }
-
         applyEQModelToAudioEngine(audioEngine: audioEngine, eqModel: eqModel)
-
-        if !audioEngine.isRunning,
-           audioEngine.selectedInputDeviceID != nil,
-           audioEngine.selectedOutputDeviceID != nil {
-            audioEngine.start()
-        }
+        SpeakerrStore.playback?.start()
     }
 
     private static func configureEngineCallbacks(audioEngine: AudioEngine, eqModel: EQModel) {
@@ -255,18 +220,16 @@ struct SpeakerrApp: App {
     private static func cycleToNextOutputDevice(audioEngine: AudioEngine) {
         let deviceManager = AudioDeviceManager()
         let preferredUIDs = AppSettingsStore.shared.load()?.shortcutOutputDeviceUIDs
+        let selectedUID = SpeakerrStore.playback?.selectedOutputUIDs.first
         guard let nextDevice = deviceManager.nextOutputDevice(
-            after: audioEngine.selectedOutputDeviceID,
+            after: deviceManager.outputDevices.first(where: { $0.uid == selectedUID })?.id,
             preferredUIDs: preferredUIDs
         ) else {
             return
         }
 
         DispatchQueue.main.async {
-            audioEngine.setOutputDevice(nextDevice.id)
-            AppSettingsStore.shared.update { settings in
-                settings.selectedOutputDeviceID = Int32(nextDevice.id)
-            }
+            SpeakerrStore.playback?.selectOutputs([nextDevice.uid])
         }
     }
 }

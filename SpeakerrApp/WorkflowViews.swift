@@ -6,7 +6,7 @@ import SwiftUI
 struct SpeakerSelectionView: View {
     @Bindable var model: SpeakerrViewModel
     @Environment(\.dismiss) private var dismiss
-    @State private var selected: Set<String> = []
+    @State private var selected: [String] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -47,7 +47,7 @@ struct SpeakerSelectionView: View {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("Use Selected") {
-                    model.useSelectedSpeakers(model.availableOutputs.filter { selected.contains($0.id) }.map(\.id))
+                    model.useSelectedSpeakers(selected)
                 }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
@@ -56,14 +56,14 @@ struct SpeakerSelectionView: View {
         }
         .padding(24)
         .frame(width: 560, height: 440)
-        .onAppear { selected = Set(model.preferences.selectedSpeakerUIDs) }
+        .onAppear { selected = model.playbackCoordinator?.selectedOutputUIDs ?? model.preferences.selectedSpeakerUIDs }
     }
 
     private func toggle(_ uid: String) {
-        if selected.contains(uid) {
-            selected.remove(uid)
+        if let index = selected.firstIndex(of: uid) {
+            selected.remove(at: index)
         } else if selected.count < 2 {
-            selected.insert(uid)
+            selected.append(uid)
         }
     }
 }
