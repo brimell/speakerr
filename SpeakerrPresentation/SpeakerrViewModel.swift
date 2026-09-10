@@ -190,7 +190,11 @@ public final class SpeakerrViewModel {
         }
         let outputs = preferences.selectedSpeakerUIDs
         let input = preferences.programmeInputUID
+        #if DEBUG
+        let level = 0.18
+        #else
         let level = preferences.calibrationVolume
+        #endif
         let mode = preferences.routingMode
         Task {
             do {
@@ -258,7 +262,11 @@ public final class SpeakerrViewModel {
             do {
                 var configuration = CalibrationExperimentConfiguration()
                 configuration.measurementsPerSpeaker = preferences.measurementsPerSpeaker
+                #if DEBUG
+                configuration.level = 0.18
+                #else
                 configuration.level = preferences.calibrationVolume
+                #endif
                 let passes = try await controller.calibrate(inputUID: inputUID, configuration: configuration) { [weak self] update in
                     Task { @MainActor in
                         guard let self, self.calibrationRunID == runID else { return }
