@@ -276,6 +276,7 @@ func calibrationPhaseText(_ update: CalibrationProgressUpdate) -> String {
         "Measuring \(name)…"
     case .applyingCorrection: "Applying correction…"
     case .verifying: "Verifying alignment…"
+    case .completed: "Calibration complete"
     }
 }
 
@@ -298,6 +299,8 @@ func calibrationProgressFraction(_ update: CalibrationProgressUpdate) -> Double?
         return min(1, max(0, Double(measurement) / Double(totalMeasurements)))
     case .applyingCorrection, .verifying:
         return nil
+    case .completed:
+        return 1
     }
 }
 

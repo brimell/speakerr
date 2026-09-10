@@ -27,6 +27,7 @@ public struct CalibrationProgressUpdate: Sendable, Equatable {
         case measuring(speakerIndex: Int, speakerName: String, pass: Int, totalPasses: Int, measurement: Int, totalMeasurements: Int)
         case applyingCorrection(residualMilliseconds: Double)
         case verifying(pass: Int)
+        case completed
     }
 
     public let phase: Phase

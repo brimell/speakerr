@@ -398,6 +398,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                     let confidence = allMeasurements.map(\.estimate.confidence).reduce(0, +) / Double(allMeasurements.count)
                     calibrationSnapshot = CalibrationSnapshot(outputUIDs: outputUIDs, sampleRate: sampleRate, compensationByUID: Dictionary(uniqueKeysWithValues: zip(outputUIDs, delayComponents.map(\.calibration))), residualMilliseconds: abs(residual), confidence: confidence, sessionGeneration: generation)
                     _ = try stateMachine.handle(.calibrationSucceeded)
+                    progress?(.init(phase: .completed, progressFraction: 1))
                     resumeProgramme()
                     return passes
                 }
@@ -485,12 +486,16 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             try Task.checkCancellation()
             for speaker in outputs.indices where values[speaker].count < configuration.measurementsPerSpeaker {
                 let measurementNumber = values[speaker].count + 1
-                let completedMeasurements = (pass * outputs.count * configuration.measurementsPerSpeaker) + (speaker * configuration.measurementsPerSpeaker) + measurementNumber
-                let totalMeasurements = configuration.maximumPasses * outputs.count * configuration.measurementsPerSpeaker
-                let fraction = totalMeasurements > 0 ? Double(completedMeasurements) / Double(totalMeasurements) : nil
+                do {
+                    values[speaker].append(try await emitAndMeasure(pass: pass, sequence: attempt * outputs.count + speaker, speaker: speaker, configuration: configuration, microphone: microphone, reference: reference))
+                } catch {
+                    failures.append("pass=\(pass + 1) attempt=\(attempt + 1) speaker=\(speaker): \(error.localizedDescription)")
+                }
+                // Each pass has a bounded number of attempts per speaker, including retries.
+                // Report completed attempt work rather than only valid measurements.
+                let attemptFraction = (Double(attempt) + Double(speaker + 1) / Double(outputs.count)) / Double(maximumAttempts)
+                let fraction = (Double(pass) + attemptFraction) / Double(configuration.maximumPasses)
                 progress?(.init(phase: .measuring(speakerIndex: speaker, speakerName: outputs[speaker].name, pass: pass + 1, totalPasses: configuration.maximumPasses, measurement: measurementNumber, totalMeasurements: configuration.measurementsPerSpeaker), progressFraction: fraction))
-                do { values[speaker].append(try await emitAndMeasure(pass: pass, sequence: attempt * outputs.count + speaker, speaker: speaker, configuration: configuration, microphone: microphone, reference: reference)) }
-                catch { failures.append("pass=\(pass + 1) attempt=\(attempt + 1) speaker=\(speaker): \(error.localizedDescription)") }
             }
         }
         for speaker in outputs.indices where values[speaker].count < configuration.measurementsPerSpeaker {
