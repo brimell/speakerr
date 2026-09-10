@@ -8,14 +8,16 @@ public final class AggregateDeviceManager {
         public let uid: String
         public let sampleRate: Double
         public let channelCounts: [Int]
+        public let channelOffsets: [Int]
         public let mainDeviceUID: String
         public let driftCompensatedUIDs: [String]
 
-        public init(deviceID: AudioDeviceID, uid: String, sampleRate: Double, channelCounts: [Int], mainDeviceUID: String, driftCompensatedUIDs: [String]) {
+        public init(deviceID: AudioDeviceID, uid: String, sampleRate: Double, channelCounts: [Int], channelOffsets: [Int], mainDeviceUID: String, driftCompensatedUIDs: [String]) {
             self.deviceID = deviceID
             self.uid = uid
             self.sampleRate = sampleRate
             self.channelCounts = channelCounts
+            self.channelOffsets = channelOffsets
             self.mainDeviceUID = mainDeviceUID
             self.driftCompensatedUIDs = driftCompensatedUIDs
         }
@@ -65,10 +67,26 @@ public final class AggregateDeviceManager {
                 AudioHardwareDestroyAggregateDevice(aggregateID)
                 throw CoreAudioError("Verify aggregate subdevices", status: kAudioHardwareNotRunningError)
             }
+            let subdeviceUIDs = composedSubdevices.compactMap { $0["uid"] as? String }
+            guard subdeviceUIDs.count == outputs.count, Set(subdeviceUIDs).count == outputs.count,
+                  Set(subdeviceUIDs) == Set(outputs.map(\.id)) else {
+                AudioHardwareDestroyAggregateDevice(aggregateID)
+                throw CoreAudioError("Verify aggregate subdevice order", status: kAudioHardwareNotRunningError)
+            }
             let driftReadback = composedSubdevices.dropFirst().allSatisfy { ($0["drift"] as? NSNumber)?.intValue == 1 }
             guard driftReadback else {
                 AudioHardwareDestroyAggregateDevice(aggregateID)
                 throw CoreAudioError("Verify drift compensation", status: kAudioHardwareUnsupportedOperationError)
+            }
+            var channelOffsets = Array(repeating: 0, count: outputs.count)
+            var channelOffset = 0
+            for uid in subdeviceUIDs {
+                guard let route = outputs.firstIndex(where: { $0.id == uid }) else {
+                    AudioHardwareDestroyAggregateDevice(aggregateID)
+                    throw CoreAudioError("Map aggregate subdevice order", status: kAudioHardwareNotRunningError)
+                }
+                channelOffsets[route] = channelOffset
+                channelOffset += outputs[route].channelCount
             }
 
             let created = Session(
@@ -76,11 +94,12 @@ public final class AggregateDeviceManager {
                 uid: uid,
                 sampleRate: try CoreAudioProperty.double(aggregateID, selector: kAudioDevicePropertyNominalSampleRate),
                 channelCounts: outputs.map(\.channelCount),
+                channelOffsets: channelOffsets,
                 mainDeviceUID: outputs[0].id,
                 driftCompensatedUIDs: outputs.dropFirst().map(\.id)
             )
             session = created
-            logger.info("Created private aggregate id=\(aggregateID, privacy: .public) rate=\(created.sampleRate, privacy: .public) subdevices=\(composedSubdevices.count, privacy: .public) channelCounts=\(created.channelCounts, privacy: .public) channels=\(actualChannels, privacy: .public) clock=\(created.mainDeviceUID, privacy: .public) driftCompensatedUIDs=\(created.driftCompensatedUIDs, privacy: .public)")
+            logger.info("Created private aggregate id=\(aggregateID, privacy: .public) rate=\(created.sampleRate, privacy: .public) subdeviceUIDs=\(subdeviceUIDs, privacy: .public) channelCounts=\(created.channelCounts, privacy: .public) channelOffsets=\(created.channelOffsets, privacy: .public) channels=\(actualChannels, privacy: .public) clock=\(created.mainDeviceUID, privacy: .public) driftCompensatedUIDs=\(created.driftCompensatedUIDs, privacy: .public)")
             return created
         } catch {
             restoreSampleRates()

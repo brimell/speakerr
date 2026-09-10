@@ -30,11 +30,12 @@ struct OutputChannelAssignment: Equatable {
 }
 
 enum OutputChannelMap {
-    static func assignments(channelCounts: [Int]) -> [OutputChannelAssignment] {
+    static func assignments(channelCounts: [Int], offsets: [Int]? = nil) -> [OutputChannelAssignment] {
         var offset = 0
-        return channelCounts.map { count in
-            defer { offset += count }
-            return OutputChannelAssignment(offset: offset, count: count)
+        return channelCounts.enumerated().map { index, count in
+            let assignment = OutputChannelAssignment(offset: offsets?[index] ?? offset, count: count)
+            offset += count
+            return assignment
         }
     }
 

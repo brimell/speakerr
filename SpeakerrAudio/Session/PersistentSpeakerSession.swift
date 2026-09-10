@@ -49,7 +49,7 @@ final class PersistentRenderState: @unchecked Sendable {
 
     private let routingMode: SpeakerRoutingMode
 
-    init(sampleRate: Double, chirp: [Float], transport: StereoRingBuffer, channelCounts: [Int], delays initialDelays: [Double], routingMode: SpeakerRoutingMode) throws {
+    init(sampleRate: Double, chirp: [Float], transport: StereoRingBuffer, channelCounts: [Int], channelOffsets: [Int]? = nil, delays initialDelays: [Double], routingMode: SpeakerRoutingMode) throws {
         #if DEBUG
         precondition(channelCounts.count >= 2, "Persistent render state requires at least two routes")
         precondition(initialDelays.count == channelCounts.count, "Persistent render state delay count must match route count")
@@ -60,7 +60,7 @@ final class PersistentRenderState: @unchecked Sendable {
         self.transport = transport
         self.routingMode = routingMode
         delays = try initialDelays.map { try FractionalDelayLine(sampleRate: sampleRate, initialDelayMilliseconds: $0) }
-        assignments = OutputChannelMap.assignments(channelCounts: channelCounts)
+        assignments = OutputChannelMap.assignments(channelCounts: channelCounts, offsets: channelOffsets)
         masterEQ = ParametricEQ(sampleRate: sampleRate)
         routeEQs = channelCounts.map { _ in ParametricEQ(sampleRate: sampleRate) }
         routeVolumes = channelCounts.map { _ in RouteVolume() }
@@ -346,7 +346,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             #endif
             calibrationLogger.notice("Calibration session creation outputs.count=\(self.outputs.count, privacy: .public) outputNames=\(self.outputs.map(\.name), privacy: .public) outputUIDs=\(self.outputUIDs, privacy: .public) aggregateSubdeviceCount=\(aggregate.channelCounts.count, privacy: .public) aggregate.channelCounts=\(aggregate.channelCounts, privacy: .public) aggregate.driftCompensatedUIDs=\(aggregate.driftCompensatedUIDs, privacy: .public)")
             let chirp = try GolayComplementaryPairGenerator(level: calibrationLevel).generate(sampleRate: sampleRate)
-            let state = try PersistentRenderState(sampleRate: sampleRate, chirp: chirp.samples, transport: transport, channelCounts: aggregate.channelCounts, delays: delayComponents.map(\.effectiveMilliseconds), routingMode: routingMode)
+            let state = try PersistentRenderState(sampleRate: sampleRate, chirp: chirp.samples, transport: transport, channelCounts: aggregate.channelCounts, channelOffsets: aggregate.channelOffsets, delays: delayComponents.map(\.effectiveMilliseconds), routingMode: routingMode)
             #if DEBUG
             precondition(delayComponents.count == outputs.count, "Delay components must match outputs")
             #endif

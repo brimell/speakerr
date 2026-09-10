@@ -34,12 +34,12 @@ private final class CalibrationOutputRenderState: @unchecked Sendable {
     private let delayedRight: [UnsafeMutablePointer<Float>]
     private var framePosition: Int64 = 0
 
-    init(sampleRate: Double, chirp: [Float], channelCounts: [Int], initialDelays: [Double], events: [ScheduledEmissionState]) throws {
+    init(sampleRate: Double, chirp: [Float], channelCounts: [Int], channelOffsets: [Int], initialDelays: [Double], events: [ScheduledEmissionState]) throws {
         self.sampleRate = sampleRate
         self.chirp = chirp
         self.events = events
         delays = try initialDelays.map { try FractionalDelayLine(sampleRate: sampleRate, initialDelayMilliseconds: $0) }
-        assignments = OutputChannelMap.assignments(channelCounts: channelCounts)
+        assignments = OutputChannelMap.assignments(channelCounts: channelCounts, offsets: channelOffsets)
         let capacity = Int(Self.maximumFrames)
         sourceLeft = channelCounts.map { _ in .allocate(capacity: capacity) }
         sourceRight = channelCounts.map { _ in .allocate(capacity: capacity) }
@@ -165,6 +165,7 @@ public final class AcousticCalibrationSession: @unchecked Sendable {
                 sampleRate: sampleRate,
                 chirp: generated.samples,
                 channelCounts: aggregate.channelCounts,
+                channelOffsets: aggregate.channelOffsets,
                 initialDelays: outputs.indices.map { manualDelays[$0] + calibrationDelays[$0] },
                 events: plannedEvents
             )

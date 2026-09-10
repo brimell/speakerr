@@ -55,6 +55,13 @@ private final class RenderFixture {
 }
 
 final class PersistentRenderTests: XCTestCase {
+    func testMappedRoutesUseAggregateSubdeviceOffsets() {
+        let assignments = OutputChannelMap.assignments(channelCounts: [2, 2, 2], offsets: [2, 4, 0])
+
+        XCTAssertEqual(assignments.map(\.offset), [2, 4, 0])
+        XCTAssertEqual(assignments.map(\.count), [2, 2, 2])
+    }
+
     func testStereoReachesBothSpeakersAcrossBufferLayouts() throws {
         for layout in [[1, 1, 1, 1], [2, 2], [4]] {
             let fixture = try RenderFixture(mode: .stereo, bufferChannels: layout)
