@@ -80,6 +80,7 @@ private final class TestPairPlayback: SpeakerSessionControlling {
     func setRouteEQBands(route: Int, bands: [EQBand]) {}
     func setRouteEQBypass(route: Int, bypass: Bool) {}
     func setRouteVolume(route: Int, volume: Float) {}
+    func applyDynamicCorrections(residuals: [Double]) {}
 }
 
 @MainActor

@@ -429,10 +429,16 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
     }
 
     public func applyDynamicCorrection(relativeResidualBMinusA residual: Double) throws {
-        let index = residual >= 0 ? 0 : 1
-        let increment = abs(residual)
-        let old = delayComponents[index]
-        try setDelayComponents(index: index, value: DelayComponents(manual: old.manual, calibration: old.calibration, dynamicCorrection: old.dynamicCorrection + increment))
+        try applyDynamicCorrections(relativeArrivalsToReference: [0, residual])
+    }
+
+    public func applyDynamicCorrections(relativeArrivalsToReference residuals: [Double]) throws {
+        guard let maximum = residuals.max() else { return }
+        for (index, residual) in residuals.enumerated() where index < delayComponents.count {
+            let old = delayComponents[index]
+            let increment = maximum - residual
+            try setDelayComponents(index: index, value: DelayComponents(manual: old.manual, calibration: old.calibration, dynamicCorrection: old.dynamicCorrection + increment))
+        }
     }
 
     public var calibrationIsValid: Bool {

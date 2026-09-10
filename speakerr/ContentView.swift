@@ -1913,21 +1913,10 @@ struct ContentView: View {
             SpeakerrStore.model.updateMasterEQ(bands: EQBand.defaultTenBand)
             SpeakerrStore.model.updateMasterEQBypass(false)
         }
-        let uid0 = selectedOutputDeviceUIDs[0]
-        if let prof0 = DeviceProfileManager.shared.profile(for: uid0) {
-            SpeakerrStore.model.updateRouteEQ(route: 0, bands: prof0.effectiveBands)
-            SpeakerrStore.model.updateRouteEQBypass(route: 0, bypass: !prof0.isEQEnabled || !prof0.isEQFiltersEnabled)
-        } else {
-            SpeakerrStore.model.updateRouteEQ(route: 0, bands: EQBand.defaultTenBand)
-            SpeakerrStore.model.updateRouteEQBypass(route: 0, bypass: false)
-        }
-        let uid1 = selectedOutputDeviceUIDs[1]
-        if let prof1 = DeviceProfileManager.shared.profile(for: uid1) {
-            SpeakerrStore.model.updateRouteEQ(route: 1, bands: prof1.effectiveBands)
-            SpeakerrStore.model.updateRouteEQBypass(route: 1, bypass: !prof1.isEQEnabled || !prof1.isEQFiltersEnabled)
-        } else {
-            SpeakerrStore.model.updateRouteEQ(route: 1, bands: EQBand.defaultTenBand)
-            SpeakerrStore.model.updateRouteEQBypass(route: 1, bypass: false)
+        for (route, uid) in selectedOutputDeviceUIDs.enumerated() {
+            let profile = DeviceProfileManager.shared.profile(for: uid)
+            SpeakerrStore.model.updateRouteEQ(route: route, bands: profile?.effectiveBands ?? EQBand.defaultTenBand)
+            SpeakerrStore.model.updateRouteEQBypass(route: route, bypass: profile.map { !$0.isEQEnabled || !$0.isEQFiltersEnabled } ?? false)
         }
     }
 

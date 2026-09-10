@@ -87,6 +87,7 @@ public final class SpeakerrViewModel {
     private var pollingTask: Task<Void, Never>?
     private var calibrationTask: Task<Void, Never>?
     private var latestRecheckResidual: Double?
+    private var latestRecheckResiduals: [Double] = []
     private var isPaused = false
     private var attemptedSavedSessionStart = false
 
@@ -272,7 +273,8 @@ public final class SpeakerrViewModel {
                 var configuration = CalibrationExperimentConfiguration()
                 configuration.measurementsPerSpeaker = 1
                 let result = try await controller.recheck(inputUID: inputUID, configuration: configuration)
-                latestRecheckResidual = result.relativeArrivalBMinusAMilliseconds
+                latestRecheckResiduals = result.relativeArrivalsToReferenceMilliseconds
+                latestRecheckResidual = latestRecheckResiduals.max()! - latestRecheckResiduals.min()!
             } catch { present(error) }
             isBusy = false
             await refresh()
@@ -283,8 +285,9 @@ public final class SpeakerrViewModel {
         guard let residual = latestRecheckResidual else { return }
         Task {
             do {
-                try await controller.applyDynamicCorrection(residualMilliseconds: residual)
+                try await controller.applyDynamicCorrections(residuals: latestRecheckResiduals.isEmpty ? [0, residual] : latestRecheckResiduals)
                 latestRecheckResidual = nil
+                latestRecheckResiduals = []
             } catch { present(error) }
             await refresh()
         }

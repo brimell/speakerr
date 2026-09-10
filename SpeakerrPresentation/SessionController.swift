@@ -27,6 +27,7 @@ public protocol SpeakerSessionControlling: Sendable {
     func calibrate(inputUID: String, configuration: CalibrationExperimentConfiguration, progress: @escaping @Sendable (CalibrationProgressUpdate) -> Void) async throws -> [CalibrationPassMeasurements]
     func recheck(inputUID: String, configuration: CalibrationExperimentConfiguration) async throws -> CalibrationPassMeasurements
     func applyDynamicCorrection(residualMilliseconds: Double) async throws
+    func applyDynamicCorrections(residuals: [Double]) async throws
     func setManualDelay(outputUID: String, milliseconds: Double) async throws
     func setMasterEQBands(_ bands: [EQBand]) async
     func setMasterEQBypass(_ bypass: Bool) async
@@ -140,6 +141,11 @@ public actor CoreAudioSpeakerSessionController: SpeakerSessionControlling {
     public func applyDynamicCorrection(residualMilliseconds: Double) throws {
         guard let session else { throw SessionControllerError.sessionNotRunning }
         try session.applyDynamicCorrection(relativeResidualBMinusA: residualMilliseconds)
+    }
+
+    public func applyDynamicCorrections(residuals: [Double]) throws {
+        guard let session else { throw SessionControllerError.sessionNotRunning }
+        try session.applyDynamicCorrections(relativeArrivalsToReference: residuals)
     }
 
     public func setManualDelay(outputUID: String, milliseconds: Double) throws {

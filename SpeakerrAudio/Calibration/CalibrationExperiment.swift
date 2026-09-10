@@ -50,6 +50,7 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
               passGapSeconds >= 0,
               postRollSeconds >= maximumAcousticLatencySeconds,
               measurementsPerSpeaker > 0,
+              selectedSpeakerCount > 0,
               maximumPasses > 0,
               maximumRetriesPerSpeaker >= 0,
               maximumAcousticLatencySeconds > 0,
@@ -149,6 +150,24 @@ public struct CalibrationPassMeasurements: Sendable, Equatable, Codable {
     public var relativeArrivalsToReferenceMilliseconds: [Double] {
         guard let reference = summariesBySpeaker.first?.medianMilliseconds else { return [] }
         return summariesBySpeaker.map { $0.medianMilliseconds - reference }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case pass, measurementsA, measurementsB, failures, summaryA, summaryB
+        case relativeArrivalBMinusAMilliseconds, measurementsBySpeaker, summariesBySpeaker
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        pass = try values.decode(Int.self, forKey: .pass)
+        measurementsA = try values.decode([AcousticMeasurement].self, forKey: .measurementsA)
+        measurementsB = try values.decode([AcousticMeasurement].self, forKey: .measurementsB)
+        failures = try values.decode([String].self, forKey: .failures)
+        summaryA = try values.decode(RobustMeasurementSummary.self, forKey: .summaryA)
+        summaryB = try values.decode(RobustMeasurementSummary.self, forKey: .summaryB)
+        relativeArrivalBMinusAMilliseconds = try values.decode(Double.self, forKey: .relativeArrivalBMinusAMilliseconds)
+        measurementsBySpeaker = try values.decodeIfPresent([[AcousticMeasurement]].self, forKey: .measurementsBySpeaker) ?? [measurementsA, measurementsB]
+        summariesBySpeaker = try values.decodeIfPresent([RobustMeasurementSummary].self, forKey: .summariesBySpeaker) ?? [summaryA, summaryB]
     }
 }
 

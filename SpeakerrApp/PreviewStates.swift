@@ -12,6 +12,7 @@ private actor PreviewSessionController: SpeakerSessionControlling {
     func calibrate(inputUID: String, configuration: CalibrationExperimentConfiguration, progress: @escaping @Sendable (CalibrationProgressUpdate) -> Void) async throws -> [CalibrationPassMeasurements] { throw CancellationError() }
     func recheck(inputUID: String, configuration: CalibrationExperimentConfiguration) async throws -> CalibrationPassMeasurements { throw CancellationError() }
     func applyDynamicCorrection(residualMilliseconds: Double) throws {}
+    func applyDynamicCorrections(residuals: [Double]) throws {}
     func setManualDelay(outputUID: String, milliseconds: Double) throws {}
     func setMasterEQBands(_ bands: [EQBand]) async {}
     func setMasterEQBypass(_ bypass: Bool) async {}
