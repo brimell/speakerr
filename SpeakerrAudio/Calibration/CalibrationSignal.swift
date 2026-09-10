@@ -53,24 +53,32 @@ public struct GolayComplementaryPairGenerator: CalibrationSignalGenerator, Senda
         guard lowFrequency > 0, highFrequency > lowFrequency, highFrequency < sampleRate * 0.5 else {
             throw CalibrationSignalError.invalidFrequencyRange
         }
+
         guard sequenceDurationSeconds > 0, interSequenceSilenceSeconds >= 0,
               fadeSeconds >= 0, fadeSeconds * 2 <= sequenceDurationSeconds else {
             throw CalibrationSignalError.invalidDuration
         }
         guard level > 0, level <= 0.5 else { throw CalibrationSignalError.invalidLevel }
 
-        // 1024 chips at 8 samples/chip gives a 170.7 ms sequence at 48 kHz.
-        let chipCount = 1 << 10
-        let chipSamples = max(1, Int((sequenceDurationSeconds * sampleRate / Double(chipCount)).rounded()))
+        // An order-13 pair is 8192 chips: 170.7 ms at 48 kHz without a
+        // zero-order hold that would introduce a 6 kHz spectral null.
         let silenceCount = Int((interSequenceSilenceSeconds * sampleRate).rounded())
-        let chipsA = Self.golay(order: 10).0
-        let chipsB = Self.golay(order: 10).1
-        let rawA = Self.expand(chipsA, samplesPerChip: chipSamples)
-        let rawB = Self.expand(chipsB, samplesPerChip: chipSamples)
-        let a = Self.bandLimit(rawA, sampleRate: sampleRate, low: lowFrequency, high: highFrequency, level: level, fadeSeconds: fadeSeconds)
-        let b = Self.bandLimit(rawB, sampleRate: sampleRate, low: lowFrequency, high: highFrequency, level: level, fadeSeconds: fadeSeconds)
+        let chipsA = Self.golay(order: 13).0
+        let chipsB = Self.golay(order: 13).1
+        let rawA = chipsA
+        let rawB = chipsB
+        let filteredA = Self.bandLimit(rawA, sampleRate: sampleRate, low: lowFrequency, high: highFrequency, fadeSeconds: fadeSeconds)
+        let filteredB = Self.bandLimit(rawB, sampleRate: sampleRate, low: lowFrequency, high: highFrequency, fadeSeconds: fadeSeconds)
+        let peak = max(filteredA.map { abs($0) }.max() ?? 0, filteredB.map { abs($0) }.max() ?? 0)
+        let scale = peak > 0 ? Float(level) / peak : 0
+        let a = filteredA.map { $0 * scale }
+        let b = filteredB.map { $0 * scale }
         let samples = a + [Float](repeating: 0, count: silenceCount) + b
         return CalibrationSignal(samples: samples, sampleRate: sampleRate, complementarySequences: (a, b), interSequenceSilenceSamples: silenceCount)
+    }
+
+    public static func rawPair(order: Int = 13) -> ([Float], [Float]) {
+        golay(order: order)
     }
 
     private static func golay(order: Int) -> ([Float], [Float]) {
@@ -85,11 +93,7 @@ public struct GolayComplementaryPairGenerator: CalibrationSignalGenerator, Senda
         return (a, b)
     }
 
-    private static func expand(_ chips: [Float], samplesPerChip: Int) -> [Float] {
-        chips.flatMap { Array(repeating: $0, count: samplesPerChip) }
-    }
-
-    private static func bandLimit(_ input: [Float], sampleRate: Double, low: Double, high: Double, level: Double, fadeSeconds: Double) -> [Float] {
+    private static func bandLimit(_ input: [Float], sampleRate: Double, low: Double, high: Double, fadeSeconds: Double) -> [Float] {
         let taps = 161
         let half = taps / 2
         var output = [Float](repeating: 0, count: input.count)
@@ -105,17 +109,13 @@ public struct GolayComplementaryPairGenerator: CalibrationSignalGenerator, Senda
                 let window = 0.54 - 0.46 * cos(2 * .pi * Double(tap) / Double(taps - 1))
                 sum += Double(input[source]) * (sincHigh - sincLow) * window
             }
-            output[index] = Float(sum * level)
+            output[index] = Float(sum)
         }
         let fadeCount = min(Int((fadeSeconds * sampleRate).rounded()), output.count / 2)
         for index in 0..<fadeCount {
             let envelope = 0.5 - 0.5 * cos(.pi * Double(index) / Double(fadeCount))
             output[index] *= Float(envelope)
             output[output.count - 1 - index] *= Float(envelope)
-        }
-        if let peak = output.map({ abs($0) }).max(), peak > 0 {
-            let scale = Float(level) / peak
-            for index in output.indices { output[index] *= scale }
         }
         return output
     }

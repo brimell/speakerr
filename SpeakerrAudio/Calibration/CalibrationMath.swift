@@ -33,12 +33,17 @@ public enum CalibrationMathError: LocalizedError, Equatable {
 }
 
 public struct DelayCompensation: Sendable, Equatable, Codable {
-    public let calibrationDelayA: Double
-    public let calibrationDelayB: Double
+    public let delays: [Double]
+
+    public var calibrationDelayA: Double { delays.indices.contains(0) ? delays[0] : 0 }
+    public var calibrationDelayB: Double { delays.indices.contains(1) ? delays[1] : 0 }
 
     public init(calibrationDelayA: Double, calibrationDelayB: Double) {
-        self.calibrationDelayA = calibrationDelayA
-        self.calibrationDelayB = calibrationDelayB
+        delays = [calibrationDelayA, calibrationDelayB]
+    }
+
+    public init(delays: [Double]) {
+        self.delays = delays
     }
 
     public static func calculate(relativeArrivalBMinusA: Double, maximumDelay: Double = FractionalDelayLine.maximumDelayMilliseconds) throws -> DelayCompensation {
@@ -51,6 +56,18 @@ public struct DelayCompensation: Sendable, Equatable, Codable {
         let required = max(result.calibrationDelayA, result.calibrationDelayB)
         guard required <= maximumDelay else { throw CalibrationMathError.compensationExceedsMaximum(required) }
         return result
+    }
+
+    public static func calculate(arrivalMilliseconds: [Double], maximumDelay: Double = FractionalDelayLine.maximumDelayMilliseconds) throws -> DelayCompensation {
+        guard !arrivalMilliseconds.isEmpty, arrivalMilliseconds.allSatisfy(\.isFinite) else {
+            throw CalibrationMathError.noMeasurements
+        }
+        guard let latest = arrivalMilliseconds.max() else { throw CalibrationMathError.noMeasurements }
+        let delays = arrivalMilliseconds.map { latest - $0 }
+        guard let required = delays.max(), required <= maximumDelay else {
+            throw CalibrationMathError.compensationExceedsMaximum(delays.max() ?? 0)
+        }
+        return DelayCompensation(delays: delays)
     }
 }
 

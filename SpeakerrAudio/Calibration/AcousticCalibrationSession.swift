@@ -184,14 +184,13 @@ public final class AcousticCalibrationSession: @unchecked Sendable {
     }
 
     public func setCalibrationDelays(_ delays: DelayCompensation) throws {
-        let values = [delays.calibrationDelayA, delays.calibrationDelayB]
         for index in outputs.indices {
-            guard index < values.count else { continue }
-            let effective = manualDelays[index] + values[index]
+            let calibration = delays.delays.indices.contains(index) ? delays.delays[index] : 0
+            let effective = manualDelays[index] + calibration
             guard effective <= FractionalDelayLine.maximumDelayMilliseconds else { throw CalibrationMathError.compensationExceedsMaximum(effective) }
             try renderState?.setDelay(index: index, milliseconds: effective)
         }
-        calibrationDelays = values
+        calibrationDelays = outputs.indices.map { delays.delays.indices.contains($0) ? delays.delays[$0] : 0 }
     }
 
     public func waitForPass(_ pass: Int) async throws -> CalibrationPassMeasurements {

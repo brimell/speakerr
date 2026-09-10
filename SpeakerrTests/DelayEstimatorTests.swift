@@ -63,6 +63,24 @@ final class DelayEstimatorTests: XCTestCase {
         XCTAssertThrowsError(try estimator.estimateDelay(reference: reference, recording: recording, sampleRate: rate)) {
             guard case .lowConfidence = $0 as? DelayEstimatorError else { return XCTFail("Expected low confidence, got \($0)") }
         }
+
+        func testGolayPairUsesSignedCombinedResponseWithFractionalDelay() throws {
+            let rate = 48_000.0
+            let signal = try GolayComplementaryPairGenerator().generate(sampleRate: rate)
+            let pair = signal.complementarySequences!
+            let delay = 1234.25
+            var recording = [Float](repeating: 0, count: Int(delay) + signal.samples.count + 2_000)
+            addFractional(signal.samples, to: &recording, at: delay, gain: 0.35)
+            let estimate = try estimator.estimateDelay(
+                referenceA: pair.0,
+                referenceB: pair.1,
+                recording: recording,
+                sampleRate: rate,
+                interSequenceSilenceSamples: signal.interSequenceSilenceSamples
+            )
+            XCTAssertEqual(estimate.sampleOffset, delay, accuracy: 0.08)
+            XCTAssertGreaterThan(estimate.confidence, 0.8)
+        }
     }
 
     func testSearchWindowRestrictsCandidate() throws {

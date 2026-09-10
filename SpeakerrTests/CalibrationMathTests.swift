@@ -15,6 +15,13 @@ final class CalibrationMathTests: XCTestCase {
         XCTAssertThrowsError(try DelayCompensation.calculate(relativeArrivalBMinusA: 1_001))
     }
 
+    func testCompensationAlignsAnyNumberOfSpeakersToLatestArrival() throws {
+        let result = try DelayCompensation.calculate(arrivalMilliseconds: [81.37, 137.84, 95.62, 111.20])
+        for (actual, expected) in zip(result.delays, [56.47, 0, 42.22, 26.64]) {
+            XCTAssertEqual(actual, expected, accuracy: 0.001)
+        }
+    }
+
     func testConvergenceSuccessAndLimit() {
         let controller = ConvergenceController()
         XCTAssertTrue(controller.shouldContinue(residuals: [8]))

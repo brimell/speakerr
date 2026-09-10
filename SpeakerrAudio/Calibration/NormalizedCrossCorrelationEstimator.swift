@@ -77,8 +77,13 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
         let secondLower = lower + referenceA.count + max(0, interSequenceSilenceSamples)
         let secondUpper = upper + referenceA.count + max(0, interSequenceSilenceSamples)
         let second = correlationSeries(reference: referenceB, recording: recording, lower: secondLower, upper: secondUpper)
-        var correlations = zip(first, second).map(+)
-        correlations = correlations.map { $0 * 0.5 }
+        let combinedReferenceEnergy = first.referenceEnergy + second.referenceEnergy
+        let correlations = first.numerators.indices.map { index in
+            let combinedRecordingEnergy = first.recordingEnergies[index] + second.recordingEnergies[index]
+            let denominator = sqrt(combinedReferenceEnergy * combinedRecordingEnergy)
+            let numerator = first.numerators[index] + second.numerators[index]
+            return denominator > 1e-12 ? abs(numerator / denominator) : 0
+        }
         guard let peakIndex = correlations.indices.max(by: { correlations[$0] < correlations[$1] }) else {
             throw DelayEstimatorError.invalidSearchWindow
         }
@@ -94,9 +99,13 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
         let confidence = 0.75 * peakScore + 0.25 * prominenceScore
         var fractionalIndex = Double(peakIndex)
         if peakIndex > 0, peakIndex + 1 < correlations.count {
-            let denominator = correlations[peakIndex - 1] - 2 * correlations[peakIndex] + correlations[peakIndex + 1]
+            let left = correlations[peakIndex - 1]
+            let center = correlations[peakIndex]
+            let right = correlations[peakIndex + 1]
+            let denominator = left - 2 * center + right
             if abs(denominator) > 1e-12 {
-                fractionalIndex += max(-0.5, min(0.5, 0.5 * (correlations[peakIndex - 1] - correlations[peakIndex + 1]) / denominator))
+                let offset = 0.5 * (left - right) / denominator
+                fractionalIndex += max(-0.5, min(0.5, offset))
             }
         }
         let estimate = DelayEstimate(sampleOffset: Double(lower) + fractionalIndex, sampleRate: sampleRate, confidence: confidence, peakValue: peak, secondBestPeak: secondBest, peakProminence: prominence)
@@ -183,7 +192,7 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
         return estimate
     }
 
-    private func correlationSeries(reference: [Float], recording: [Float], lower: Int, upper: Int) -> [Double] {
+    private func correlationSeries(reference: [Float], recording: [Float], lower: Int, upper: Int) -> (numerators: [Double], referenceEnergy: Double, recordingEnergies: [Double]) {
         let ref = reference.map(Double.init)
         let mean = ref.reduce(0, +) / Double(ref.count)
         let centered = ref.map { $0 - mean }
@@ -196,15 +205,15 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
             prefix[index + 1] = prefix[index] + recordingDouble[index]
             prefixSquares[index + 1] = prefixSquares[index] + recordingDouble[index] * recordingDouble[index]
         }
-        var result = [Double](repeating: 0, count: upper - lower)
+        var numerators = [Double](repeating: 0, count: upper - lower)
+        var recordingEnergies = [Double](repeating: 0, count: upper - lower)
         for start in lower..<upper {
             let sum = prefix[start + ref.count] - prefix[start]
             let squares = prefixSquares[start + ref.count] - prefixSquares[start]
             let centeredEnergy = max(0, squares - sum * sum / Double(ref.count))
-            let numerator = convolution[start + ref.count - 1]
-            let denominator = sqrt(energy * centeredEnergy)
-            result[start - lower] = denominator > 1e-12 ? abs(numerator / denominator) : 0
+            numerators[start - lower] = convolution[start + ref.count - 1]
+            recordingEnergies[start - lower] = centeredEnergy
         }
-        return result
+        return (numerators, energy, recordingEnergies)
     }
 }
