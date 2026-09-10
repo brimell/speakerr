@@ -40,6 +40,7 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
         self.targetResidualMilliseconds = targetResidualMilliseconds
         self.level = level
         self.stabilityMeasurementOffsetsSeconds = stabilityMeasurementOffsetsSeconds
+        self.selectedSpeakerCount = 2
     }
 
     public func validate() throws {
@@ -59,7 +60,8 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
         guard level > 0, level <= 0.5 else { throw CalibrationSignalError.invalidLevel }
     }
 
-    public var eventsPerPass: Int { 2 * (measurementsPerSpeaker + maximumRetriesPerSpeaker) }
+    public var eventsPerPass: Int { selectedSpeakerCount * (measurementsPerSpeaker + maximumRetriesPerSpeaker) }
+    public var selectedSpeakerCount: Int
 
     public func passStartSeconds(_ pass: Int) -> Double {
         let passStride = Double(eventsPerPass) * intervalSeconds + passGapSeconds
@@ -101,15 +103,29 @@ public struct CalibrationPassMeasurements: Sendable, Equatable, Codable {
     public let summaryA: RobustMeasurementSummary
     public let summaryB: RobustMeasurementSummary
     public let relativeArrivalBMinusAMilliseconds: Double
+    public let measurementsBySpeaker: [[AcousticMeasurement]]
+    public let summariesBySpeaker: [RobustMeasurementSummary]
 
     public init(pass: Int, measurementsA: [AcousticMeasurement], measurementsB: [AcousticMeasurement], failures: [String]) throws {
+        try self.init(pass: pass, measurementsBySpeaker: [measurementsA, measurementsB], failures: failures)
+    }
+
+    public init(pass: Int, measurementsBySpeaker: [[AcousticMeasurement]], failures: [String]) throws {
+        guard measurementsBySpeaker.count >= 2 else { throw CalibrationMathError.noMeasurements }
         self.pass = pass
-        self.measurementsA = measurementsA
-        self.measurementsB = measurementsB
+        self.measurementsBySpeaker = measurementsBySpeaker
+        self.summariesBySpeaker = try measurementsBySpeaker.map { try RobustMeasurementSummary(values: $0.map(\.acousticLatencyMilliseconds)) }
+        self.measurementsA = measurementsBySpeaker[0]
+        self.measurementsB = measurementsBySpeaker[1]
         self.failures = failures
-        summaryA = try RobustMeasurementSummary(values: measurementsA.map(\.acousticLatencyMilliseconds))
-        summaryB = try RobustMeasurementSummary(values: measurementsB.map(\.acousticLatencyMilliseconds))
+        summaryA = summariesBySpeaker[0]
+        summaryB = summariesBySpeaker[1]
         relativeArrivalBMinusAMilliseconds = summaryB.medianMilliseconds - summaryA.medianMilliseconds
+    }
+
+    public var relativeArrivalsToReferenceMilliseconds: [Double] {
+        guard let reference = summariesBySpeaker.first?.medianMilliseconds else { return [] }
+        return summariesBySpeaker.map { $0.medianMilliseconds - reference }
     }
 }
 

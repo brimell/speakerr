@@ -135,8 +135,10 @@ public final class AcousticCalibrationSession: @unchecked Sendable {
     private var running = false
 
     public init(outputs: [OutputDevice], input: InputDevice, configuration: CalibrationExperimentConfiguration = .init(), estimator: NormalizedCrossCorrelationEstimator = .init()) throws {
-        guard outputs.count == 2 else { throw AudioRoutingError.requiresExactlyTwoOutputs }
-        guard outputs[0].id != outputs[1].id else { throw AudioRoutingError.duplicateOutput }
+        guard outputs.count >= 2 else { throw AudioRoutingError.requiresAtLeastTwoOutputs }
+        guard Set(outputs.map(\.id)).count == outputs.count else { throw AudioRoutingError.duplicateOutput }
+        var configuration = configuration
+        configuration.selectedSpeakerCount = outputs.count
         try configuration.validate()
         self.outputs = outputs
         self.input = input
@@ -183,7 +185,8 @@ public final class AcousticCalibrationSession: @unchecked Sendable {
 
     public func setCalibrationDelays(_ delays: DelayCompensation) throws {
         let values = [delays.calibrationDelayA, delays.calibrationDelayB]
-        for index in 0..<2 {
+        for index in outputs.indices {
+            guard index < values.count else { continue }
             let effective = manualDelays[index] + values[index]
             guard effective <= FractionalDelayLine.maximumDelayMilliseconds else { throw CalibrationMathError.compensationExceedsMaximum(effective) }
             try renderState?.setDelay(index: index, milliseconds: effective)
@@ -201,7 +204,7 @@ public final class AcousticCalibrationSession: @unchecked Sendable {
             try await Task.sleep(for: .milliseconds(50))
         }
         guard let captured = try microphoneCapture?.snapshot() else { throw CalibrationSessionError.inputUnavailable(input.name) }
-        var bySpeaker = [[AcousticMeasurement](), [AcousticMeasurement]()]
+        var bySpeaker = outputs.map { _ in [AcousticMeasurement]() }
         var failures: [String] = []
         for event in passEvents {
             guard bySpeaker[event.speakerIndex].count < configuration.measurementsPerSpeaker else { continue }
@@ -211,10 +214,10 @@ public final class AcousticCalibrationSession: @unchecked Sendable {
                 failures.append("pass=\(pass + 1) sequence=\(event.sequence + 1) speaker=\(event.speakerIndex == 0 ? "A" : "B"): \(error.localizedDescription)")
             }
         }
-        for index in 0..<2 where bySpeaker[index].count < configuration.measurementsPerSpeaker {
+        for index in outputs.indices where bySpeaker[index].count < configuration.measurementsPerSpeaker {
             throw CalibrationSessionError.insufficientValidMeasurements(speaker: outputs[index].name, valid: bySpeaker[index].count, required: configuration.measurementsPerSpeaker)
         }
-        return try CalibrationPassMeasurements(pass: pass, measurementsA: bySpeaker[0], measurementsB: bySpeaker[1], failures: failures)
+        return try CalibrationPassMeasurements(pass: pass, measurementsBySpeaker: bySpeaker, failures: failures)
     }
 
     public func capturedAudio() throws -> CapturedAudio {
@@ -261,7 +264,7 @@ public final class AcousticCalibrationSession: @unchecked Sendable {
                 result.append(ScheduledEmissionState(
                     pass: pass,
                     sequence: sequence,
-                    speakerIndex: sequence % 2,
+                    speakerIndex: sequence % outputs.count,
                     startFrame: Int64(((start + Double(sequence) * configuration.intervalSeconds) * sampleRate).rounded())
                 ))
             }

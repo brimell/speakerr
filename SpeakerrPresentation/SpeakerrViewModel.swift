@@ -136,11 +136,11 @@ public final class SpeakerrViewModel {
     public func startSavedSessionIfNeeded() {
         guard !attemptedSavedSessionStart else { return }
         attemptedSavedSessionStart = true
-        if preferences.selectedSpeakerUIDs.count == 2 { start() }
+        if preferences.selectedSpeakerUIDs.count >= 2 { start() }
     }
 
     public func useSelectedSpeakers(_ uids: [String]) {
-        guard uids.count == 2 else { return }
+        guard uids.count >= 2, Set(uids).count == uids.count else { return }
         isSpeakerSelectionPresented = false
         if let playbackCoordinator {
             playbackCoordinator.selectOutputs(uids)
@@ -162,7 +162,7 @@ public final class SpeakerrViewModel {
     public func setRoutingMode(_ mode: SpeakerRoutingMode) {
         guard preferences.routingMode != mode else { return }
         preferences.routingMode = mode
-        if preferences.selectedSpeakerUIDs.count == 2 {
+        if preferences.selectedSpeakerUIDs.count >= 2 {
             start()
         }
     }
@@ -172,7 +172,7 @@ public final class SpeakerrViewModel {
             playbackCoordinator.start()
             return
         }
-        guard preferences.selectedSpeakerUIDs.count == 2 else {
+        guard preferences.selectedSpeakerUIDs.count >= 2 else {
             isSpeakerSelectionPresented = true
             return
         }
@@ -332,7 +332,7 @@ public final class SpeakerrViewModel {
         guard let status = snapshot.status else {
             presentation = SpeakerrPresentationState(
                 status: isPaused ? .paused : .inactive,
-                statusDetail: preferences.selectedSpeakerUIDs.count == 2 ? nil : "Select two speakers to create a Speakerr group.",
+                statusDetail: preferences.selectedSpeakerUIDs.count >= 2 ? nil : "Select at least two speakers to create a Speakerr group.",
                 speakers: savedSpeakerStates(from: snapshot),
                 calibration: .unavailable,
                 playback: .init(isActive: false, isProgrammeAttached: false, statusText: isPaused ? "Paused" : "Inactive")

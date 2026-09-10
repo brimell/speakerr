@@ -82,7 +82,7 @@ struct SpeakerrTest {
     private static func play(arguments: [String]) async throws {
         let options = try parseOptions(arguments)
         let outputs = try AudioDeviceDiscovery().outputDevices().filter { !$0.isAggregate }
-        guard outputs.count >= 2 else { throw AudioRoutingError.requiresExactlyTwoOutputs }
+        guard outputs.count >= 2 else { throw AudioRoutingError.requiresAtLeastTwoOutputs }
 
         print("Available non-aggregate outputs:")
         for (index, output) in outputs.enumerated() {
@@ -168,7 +168,7 @@ struct SpeakerrTest {
         let discovery = AudioDeviceDiscovery()
         let outputs = try discovery.outputDevices().filter { !$0.isAggregate }
         let inputs = try discovery.inputDevices()
-        guard outputs.count >= 2 else { throw AudioRoutingError.requiresExactlyTwoOutputs }
+        guard outputs.count >= 2 else { throw AudioRoutingError.requiresAtLeastTwoOutputs }
 
         print("Available non-aggregate outputs:")
         for (index, output) in outputs.enumerated() {
@@ -386,7 +386,7 @@ struct SpeakerrTest {
         let discovery = AudioDeviceDiscovery()
         let outputs = try discovery.outputDevices().filter { !$0.isAggregate }
         let inputs = try discovery.inputDevices()
-        guard outputs.count >= 2 else { throw AudioRoutingError.requiresExactlyTwoOutputs }
+        guard outputs.count >= 2 else { throw AudioRoutingError.requiresAtLeastTwoOutputs }
 
         print("Available non-aggregate outputs:")
         for (index, output) in outputs.enumerated() {

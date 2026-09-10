@@ -36,7 +36,7 @@ public protocol SpeakerSessionControlling: Sendable {
 }
 
 public enum SessionControllerError: LocalizedError, Sendable, Equatable {
-    case requiresExactlyTwoOutputs
+    case requiresAtLeastTwoOutputs
     case outputUnavailable(String)
     case inputUnavailable(String)
     case sessionNotRunning
@@ -44,7 +44,7 @@ public enum SessionControllerError: LocalizedError, Sendable, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .requiresExactlyTwoOutputs: "Select exactly two output devices."
+        case .requiresAtLeastTwoOutputs: "Select at least two output devices."
         case .outputUnavailable(let uid): "A selected speaker is unavailable (\(uid))."
         case .inputUnavailable(let uid): "The selected audio input is unavailable (\(uid))."
         case .sessionNotRunning: "Speakerr is not active."
@@ -81,7 +81,7 @@ public actor CoreAudioSpeakerSessionController: SpeakerSessionControlling {
     }
 
     public func start(outputUIDs: [String], programmeInputUID: String?, calibrationLevel: Double, routingMode: SpeakerRoutingMode = .stereo) throws {
-        guard outputUIDs.count == 2, outputUIDs[0] != outputUIDs[1] else { throw SessionControllerError.requiresExactlyTwoOutputs }
+        guard outputUIDs.count >= 2, Set(outputUIDs).count == outputUIDs.count else { throw SessionControllerError.requiresAtLeastTwoOutputs }
         stop()
         let discovery = AudioDeviceDiscovery()
         let outputs = try discovery.outputDevices()

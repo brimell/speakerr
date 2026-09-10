@@ -67,7 +67,7 @@ public struct SpeakerrAlignmentMenuView: View {
             model.isCalibrationPresented = true
             MainWindowCoordinator.shared.show(model: model)
         }
-        .disabled(model.presentation.speakers.count != 2 || model.presentation.status == .waitingForSpeaker)
+        .disabled(model.presentation.speakers.count < 2 || model.presentation.status == .waitingForSpeaker)
         Button("Recheck Alignment") { model.recheck() }
             .disabled(model.presentation.status != .aligned && model.presentation.status != .alignmentDrifting)
         Divider()
@@ -75,7 +75,7 @@ public struct SpeakerrAlignmentMenuView: View {
             Button("Pause Speakerr") { model.pause() }
         } else {
             Button("Resume Speakerr") { model.start() }
-                .disabled(model.preferences.selectedSpeakerUIDs.count != 2)
+                .disabled(model.preferences.selectedSpeakerUIDs.count < 2)
         }
         Button("Settings…") { openSettings() }
     }

@@ -102,8 +102,8 @@ public final class CoreAudioAggregateRoutingBackend: AudioRoutingBackend, @unche
     public func configureOutputs(_ outputs: [OutputDevice]) async throws {
         guard !running else { throw AudioRoutingError.alreadyRunning }
         let enabled = outputs.filter(\.enabled)
-        guard enabled.count == 2 else { throw AudioRoutingError.requiresExactlyTwoOutputs }
-        guard enabled[0].id != enabled[1].id else { throw AudioRoutingError.duplicateOutput }
+        guard enabled.count >= 2 else { throw AudioRoutingError.requiresAtLeastTwoOutputs }
+        guard Set(enabled.map(\.id)).count == enabled.count else { throw AudioRoutingError.duplicateOutput }
         for output in enabled where output.isAggregate {
             throw AudioRoutingError.aggregateOutputUnsupported(output.name)
         }
@@ -126,7 +126,7 @@ public final class CoreAudioAggregateRoutingBackend: AudioRoutingBackend, @unche
 
     public func start() async throws {
         guard !running else { throw AudioRoutingError.alreadyRunning }
-        guard configuredOutputs.count == 2 else { throw AudioRoutingError.notConfigured }
+        guard configuredOutputs.count >= 2 else { throw AudioRoutingError.notConfigured }
         do {
             let session = try aggregateManager.create(outputs: configuredOutputs)
             let state = try AggregateRenderState(

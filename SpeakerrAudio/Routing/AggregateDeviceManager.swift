@@ -31,8 +31,8 @@ public final class AggregateDeviceManager {
 
     public func create(outputs: [OutputDevice]) throws -> Session {
         guard session == nil else { throw AudioRoutingError.alreadyRunning }
-        guard outputs.count == 2 else { throw AudioRoutingError.requiresExactlyTwoOutputs }
-        guard outputs[0].id != outputs[1].id else { throw AudioRoutingError.duplicateOutput }
+        guard outputs.count >= 2 else { throw AudioRoutingError.requiresAtLeastTwoOutputs }
+        guard Set(outputs.map(\.id)).count == outputs.count else { throw AudioRoutingError.duplicateOutput }
         for output in outputs {
             guard !output.isAggregate else { throw AudioRoutingError.aggregateOutputUnsupported(output.name) }
             guard output.channelCount > 0 else { throw AudioRoutingError.deviceUnavailable(output.name) }
@@ -65,8 +65,8 @@ public final class AggregateDeviceManager {
                 AudioHardwareDestroyAggregateDevice(aggregateID)
                 throw CoreAudioError("Verify aggregate subdevices", status: kAudioHardwareNotRunningError)
             }
-            let driftReadback = (composedSubdevices[1]["drift"] as? NSNumber)?.intValue
-            guard driftReadback == 1 else {
+            let driftReadback = composedSubdevices.dropFirst().allSatisfy { ($0["drift"] as? NSNumber)?.intValue == 1 }
+            guard driftReadback else {
                 AudioHardwareDestroyAggregateDevice(aggregateID)
                 throw CoreAudioError("Verify drift compensation", status: kAudioHardwareUnsupportedOperationError)
             }
@@ -77,7 +77,7 @@ public final class AggregateDeviceManager {
                 sampleRate: try CoreAudioProperty.double(aggregateID, selector: kAudioDevicePropertyNominalSampleRate),
                 channelCounts: outputs.map(\.channelCount),
                 mainDeviceUID: outputs[0].id,
-                driftCompensatedUIDs: [outputs[1].id]
+                driftCompensatedUIDs: outputs.dropFirst().map(\.id)
             )
             session = created
             logger.info("Created private aggregate id=\(aggregateID, privacy: .public) rate=\(created.sampleRate, privacy: .public) channels=\(actualChannels, privacy: .public) clock=\(outputs[0].id, privacy: .public) drift=\(outputs[1].id, privacy: .public)")
@@ -126,7 +126,7 @@ public final class AggregateDeviceManager {
         let supported = try outputs.map { output in
             try CoreAudioProperty.availableNominalSampleRates(output.coreAudioID)
         }
-        let candidates = [outputs[0].sampleRate, 48_000, 44_100, outputs[1].sampleRate]
+        let candidates = [outputs[0].sampleRate, 48_000, 44_100] + outputs.dropFirst().map(\.sampleRate)
         guard let selected = candidates.first(where: { candidate in
             supported.allSatisfy { ranges in ranges.contains { $0.mMinimum <= candidate && candidate <= $0.mMaximum } }
         }) else {

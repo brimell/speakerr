@@ -172,10 +172,8 @@ final class TrayController: NSObject {
         var uids = SpeakerrStore.playback?.selectedOutputUIDs ?? []
         if let idx = uids.firstIndex(of: uid) {
             uids.remove(at: idx)
-        } else if uids.count < 2 {
-            uids.append(uid)
         } else {
-            uids[1] = uid
+            uids.append(uid)
         }
         SpeakerrStore.playback?.selectOutputs(uids)
     }

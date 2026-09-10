@@ -8,7 +8,7 @@ public protocol AudioRoutingBackend: Sendable {
 }
 
 public enum AudioRoutingError: LocalizedError, Equatable, Sendable {
-    case requiresExactlyTwoOutputs
+    case requiresAtLeastTwoOutputs
     case duplicateOutput
     case aggregateOutputUnsupported(String)
     case deviceUnavailable(String)
@@ -21,7 +21,7 @@ public enum AudioRoutingError: LocalizedError, Equatable, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .requiresExactlyTwoOutputs: "Select exactly two enabled output devices."
+        case .requiresAtLeastTwoOutputs: "Select at least two enabled output devices."
         case .duplicateOutput: "Select two different output devices."
         case .aggregateOutputUnsupported(let name): "\(name) is already an aggregate or multi-output device and cannot be nested."
         case .deviceUnavailable(let name): "The output device \(name) is no longer available."
@@ -29,7 +29,7 @@ public enum AudioRoutingError: LocalizedError, Equatable, Sendable {
         case .delayOutOfRange(let value): "Delay \(value) ms is outside the supported 0...1000 ms range."
         case .outputNotConfigured(let id): "No configured output has UID \(id)."
         case .alreadyRunning: "Audio routing is already running."
-        case .notConfigured: "Configure two outputs before starting playback."
+        case .notConfigured: "Configure at least two outputs before starting playback."
         case .callbackTooLarge(let frames): "CoreAudio requested an unsupported callback size of \(frames) frames."
         }
     }

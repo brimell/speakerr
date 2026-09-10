@@ -63,7 +63,7 @@ public enum SpeakerrStore {
     }
 
     private static func loadSpeakerProfiles(_ outputs: [String]) {
-        guard outputs.count == 2 else { return }
+        guard outputs.count >= 2 else { return }
         let profiles = DeviceProfileManager.shared
         let master = profiles.profile(for: "master")
         model.updateMasterEQ(bands: master?.effectiveBands ?? EQBand.defaultTenBand)

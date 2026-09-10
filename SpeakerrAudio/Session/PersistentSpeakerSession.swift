@@ -3,6 +3,11 @@ import CoreAudio
 import Foundation
 import Synchronization
 
+private final class RouteVolume: @unchecked Sendable {
+    let value: Atomic<UInt32>
+    init(_ volume: Float = 1) { value = Atomic(volume.bitPattern) }
+}
+
 enum PersistentRenderMode: UInt32 {
     case muted = 0
     case programme = 1
@@ -26,8 +31,7 @@ final class PersistentRenderState: @unchecked Sendable {
     private let assignments: [OutputChannelAssignment]
     private let masterEQ: ParametricEQ
     private let routeEQs: [ParametricEQ]
-    private let routeVolume0 = Atomic<UInt32>(Float(1.0).bitPattern)
-    private let routeVolume1 = Atomic<UInt32>(Float(1.0).bitPattern)
+    private let routeVolumes: [RouteVolume]
     private let mode = Atomic<UInt32>(PersistentRenderMode.muted.rawValue)
     private let sourceLeft: UnsafeMutablePointer<Float>
     private let sourceRight: UnsafeMutablePointer<Float>
@@ -53,6 +57,7 @@ final class PersistentRenderState: @unchecked Sendable {
         assignments = OutputChannelMap.assignments(channelCounts: channelCounts)
         masterEQ = ParametricEQ(sampleRate: sampleRate)
         routeEQs = channelCounts.map { _ in ParametricEQ(sampleRate: sampleRate) }
+        routeVolumes = channelCounts.map { _ in RouteVolume() }
         let capacity = Int(Self.maximumFrames)
         sourceLeft = .allocate(capacity: capacity)
         sourceRight = .allocate(capacity: capacity)
@@ -93,11 +98,8 @@ final class PersistentRenderState: @unchecked Sendable {
 
     func setRouteVolume(route: Int, volume: Float) {
         let bits = max(0, min(1, volume)).bitPattern
-        switch route {
-        case 0: routeVolume0.store(bits, ordering: .relaxed)
-        case 1: routeVolume1.store(bits, ordering: .relaxed)
-        default: break
-        }
+        guard routeVolumes.indices.contains(route) else { return }
+        routeVolumes[route].value.store(bits, ordering: .relaxed)
     }
 
     func requestEmission(speaker: Int) -> UInt64 {
@@ -154,9 +156,7 @@ final class PersistentRenderState: @unchecked Sendable {
             } else if currentMode == .programme {
                 routeEQs[route].process(buffer: routeLeft[route], frameCount: count, channel: 0)
                 routeEQs[route].process(buffer: routeRight[route], frameCount: count, channel: 1)
-                let volumeBits = route == 0
-                    ? routeVolume0.load(ordering: .relaxed)
-                    : routeVolume1.load(ordering: .relaxed)
+                let volumeBits = routeVolumes[route].value.load(ordering: .relaxed)
                 let volume = Float(bitPattern: volumeBits)
                 if volume < 1 {
                     for frame in 0..<count {
@@ -274,8 +274,8 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
     private var pendingRouteVolumes: [Int: Float] = [:]
 
     public init(outputs: [OutputDevice], generation: UInt64 = 1, transportCapacityFrames: Int = 44_100, routingMode: SpeakerRoutingMode = .stereo) throws {
-        guard outputs.count == 2 else { throw AudioRoutingError.requiresExactlyTwoOutputs }
-        guard outputs[0].id != outputs[1].id else { throw AudioRoutingError.duplicateOutput }
+        guard outputs.count >= 2 else { throw AudioRoutingError.requiresAtLeastTwoOutputs }
+        guard Set(outputs.map(\.id)).count == outputs.count else { throw AudioRoutingError.duplicateOutput }
         self.outputs = outputs
         outputUIDs = outputs.map(\.id)
         self.generation = generation
@@ -357,6 +357,8 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
     }
 
     public func performCalibration(input: InputDevice, configuration: CalibrationExperimentConfiguration = .init(), progress: (@Sendable (CalibrationProgressUpdate) -> Void)? = nil) async throws -> [CalibrationPassMeasurements] {
+        var configuration = configuration
+        configuration.selectedSpeakerCount = outputs.count
         try configuration.validate()
         guard running, let reference, let renderState else { throw AudioRoutingError.notConfigured }
         guard abs(input.sampleRate - sampleRate) < 0.01 else { throw CalibrationSessionError.requiresMatchingSampleRates(output: sampleRate, input: input.sampleRate) }
@@ -385,7 +387,8 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                 if pass > 0 { progress?(.init(phase: .verifying(pass: pass + 1))) }
                 let measured = try await measurePass(pass: pass, configuration: configuration, microphone: microphone, reference: reference, progress: progress)
                 passes.append(measured)
-                let residual = measured.relativeArrivalBMinusAMilliseconds
+                let residualsForSpeakers = measured.relativeArrivalsToReferenceMilliseconds
+                let residual = (residualsForSpeakers.max() ?? 0) - (residualsForSpeakers.min() ?? 0)
                 residuals.append(residual)
                 if abs(residual) <= configuration.targetResidualMilliseconds {
                     let confidence = (measured.measurementsA + measured.measurementsB).map(\.estimate.confidence).reduce(0, +) / Double(measured.measurementsA.count + measured.measurementsB.count)
@@ -396,7 +399,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                 }
                 guard convergence.shouldContinue(residuals: residuals) else { break }
                 progress?(.init(phase: .applyingCorrection(residualMilliseconds: residual)))
-                try applyResidual(residual)
+                try applyResiduals(measured.relativeArrivalsToReferenceMilliseconds)
             }
             let residual = residuals.last ?? .infinity
             _ = try stateMachine.handle(.calibrationFailed("residual \(residual) ms"))
@@ -464,21 +467,30 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
     }
 
     private func measurePass(pass: Int, configuration: CalibrationExperimentConfiguration, microphone: ContinuousMicrophoneCapture, reference: CalibrationSignal, progress: (@Sendable (CalibrationProgressUpdate) -> Void)?) async throws -> CalibrationPassMeasurements {
-        var values = [[AcousticMeasurement](), [AcousticMeasurement]()]
+        var values = outputs.map { _ in [AcousticMeasurement]() }
         var failures: [String] = []
         let maximumAttempts = configuration.measurementsPerSpeaker + configuration.maximumRetriesPerSpeaker
         for attempt in 0..<maximumAttempts {
             try Task.checkCancellation()
-            for speaker in 0..<2 where values[speaker].count < configuration.measurementsPerSpeaker {
+            for speaker in outputs.indices where values[speaker].count < configuration.measurementsPerSpeaker {
                 progress?(.init(phase: .measuring(speakerIndex: speaker, speakerName: outputs[speaker].name, pass: pass + 1, totalPasses: configuration.maximumPasses, measurement: values[speaker].count + 1, totalMeasurements: configuration.measurementsPerSpeaker)))
-                do { values[speaker].append(try await emitAndMeasure(pass: pass, sequence: attempt * 2 + speaker, speaker: speaker, configuration: configuration, microphone: microphone, reference: reference)) }
+                do { values[speaker].append(try await emitAndMeasure(pass: pass, sequence: attempt * outputs.count + speaker, speaker: speaker, configuration: configuration, microphone: microphone, reference: reference)) }
                 catch { failures.append("pass=\(pass + 1) attempt=\(attempt + 1) speaker=\(speaker): \(error.localizedDescription)") }
             }
         }
-        for speaker in 0..<2 where values[speaker].count < configuration.measurementsPerSpeaker {
+        for speaker in outputs.indices where values[speaker].count < configuration.measurementsPerSpeaker {
             throw CalibrationSessionError.insufficientValidMeasurements(speaker: outputs[speaker].name, valid: values[speaker].count, required: configuration.measurementsPerSpeaker)
         }
-        return try CalibrationPassMeasurements(pass: pass, measurementsA: values[0], measurementsB: values[1], failures: failures)
+        return try CalibrationPassMeasurements(pass: pass, measurementsBySpeaker: values, failures: failures)
+    }
+
+    private func applyResiduals(_ residuals: [Double]) throws {
+        guard let maximum = residuals.max() else { return }
+        for (index, residual) in residuals.enumerated() where index < delayComponents.count {
+            let old = delayComponents[index]
+            let delay = maximum - residual
+            try setDelayComponents(index: index, value: DelayComponents(manual: old.manual, calibration: old.calibration + delay, dynamicCorrection: old.dynamicCorrection))
+        }
     }
 
     private func emitAndMeasure(pass: Int, sequence: Int, speaker: Int, configuration: CalibrationExperimentConfiguration, microphone: ContinuousMicrophoneCapture, reference: CalibrationSignal) async throws -> AcousticMeasurement {

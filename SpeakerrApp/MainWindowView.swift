@@ -12,7 +12,7 @@ struct MainWindowView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
-            if model.preferences.selectedSpeakerUIDs.count != 2 && model.presentation.speakers.isEmpty {
+            if model.preferences.selectedSpeakerUIDs.count < 2 && model.presentation.speakers.isEmpty {
                 firstRun
             } else {
                 ScrollView {
@@ -70,7 +70,7 @@ struct MainWindowView: View {
             Image(systemName: "hifispeaker.2")
                 .font(.system(size: 36))
                 .foregroundStyle(.secondary)
-            Text("Play two speakers in sync.")
+            Text("Play multiple speakers in sync.")
                 .font(.title2.weight(.semibold))
             Text("Speakerr measures acoustic timing with your Mac’s microphone and compensates for differences automatically.")
                 .foregroundStyle(.secondary)
@@ -88,7 +88,7 @@ struct MainWindowView: View {
         VStack(alignment: .leading, spacing: 12) {
             sectionHeading("Speakers")
             if model.presentation.speakers.isEmpty {
-                Text("Select two output devices to create a Speakerr group.")
+                Text("Select at least two output devices to create a Speakerr group.")
                     .foregroundStyle(.secondary)
             } else {
                 HStack(alignment: .top, spacing: 32) {
@@ -114,7 +114,7 @@ struct MainWindowView: View {
             HStack {
                 Button(calibrationButtonTitle) { model.isCalibrationPresented = true }
                     .buttonStyle(.borderedProminent)
-                    .disabled(model.presentation.status == .waitingForSpeaker || model.presentation.speakers.count != 2)
+                    .disabled(model.presentation.status == .waitingForSpeaker || model.presentation.speakers.count < 2)
                 Button("Recheck") { model.recheck() }
                     .disabled(model.presentation.status != .aligned && model.presentation.status != .alignmentDrifting)
                 if model.presentation.status == .alignmentDrifting {

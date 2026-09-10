@@ -79,11 +79,11 @@ public final class PlaybackCoordinator {
 
     private static func orderedSelection(_ uids: [String]) -> [String] {
         var seen = Set<String>()
-        return Array(uids.filter { seen.insert($0).inserted }.prefix(2))
+        return Array(uids.filter { seen.insert($0).inserted })
     }
 
     private func synchronizePreferences() {
-        model.preferences.selectedSpeakerUIDs = selectedOutputUIDs.count == 2 ? selectedOutputUIDs : []
+        model.preferences.selectedSpeakerUIDs = selectedOutputUIDs
         model.preferences.programmeInputUID = inputUID
         onSelectionChanged?(selectedOutputUIDs, inputUID)
     }

@@ -11,7 +11,7 @@ struct SpeakerSelectionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Choose Speakers").font(.title2.weight(.semibold))
-            Text("Select exactly two output devices.").foregroundStyle(.secondary)
+            Text("Select two or more output devices.").foregroundStyle(.secondary)
             List(model.availableOutputs) { device in
                 Button {
                     toggle(device.id)
@@ -37,10 +37,6 @@ struct SpeakerSelectionView: View {
                 Text("Select one more output device to create a Speakerr group.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            } else if selected.count > 2 {
-                Text("Speakerr currently supports exactly two speakers.")
-                    .font(.caption)
-                    .foregroundStyle(.red)
             }
             HStack {
                 Spacer()
@@ -51,7 +47,7 @@ struct SpeakerSelectionView: View {
                 }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(selected.count != 2)
+                    .disabled(selected.count < 2)
             }
         }
         .padding(24)
@@ -62,9 +58,7 @@ struct SpeakerSelectionView: View {
     private func toggle(_ uid: String) {
         if let index = selected.firstIndex(of: uid) {
             selected.remove(at: index)
-        } else if selected.count < 2 {
-            selected.append(uid)
-        }
+        } else { selected.append(uid) }
     }
 }
 

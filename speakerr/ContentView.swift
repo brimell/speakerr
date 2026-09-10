@@ -64,8 +64,6 @@ struct ContentView: View {
             return "Select Speakers…"
         } else if selected.count == 1 {
             return selected[0].name
-        } else if selected.count == 2 {
-            return "\(selected[0].name) + \(selected[1].name)"
         } else {
             return "\(selected.count) Speakers Selected"
         }
@@ -341,7 +339,7 @@ struct ContentView: View {
                         .cornerRadius(12)
                     }
 
-                    if selectedOutputDevices.count == 2 {
+                    if selectedOutputDevices.count >= 2 {
                         Button {
                             MainWindowCoordinator.shared.show()
                         } label: {
@@ -363,7 +361,7 @@ struct ContentView: View {
                     Text("Tip: Select a 2nd speaker to enable dual-speaker acoustic alignment.")
                         .font(.caption2)
                         .foregroundColor(.secondary)
-                } else if selectedOutputDevices.count == 2 {
+                } else if selectedOutputDevices.count >= 2 {
                     Text(usesStereoChannelTerminology
                          ? "Dual-speaker aligned pair active: Left (Ch 1) • Right (Ch 2)"
                          : "Dual-speaker aligned pair active: Speaker 1 • Speaker 2")
@@ -417,7 +415,7 @@ struct ContentView: View {
                                 Image(systemName: "checkmark")
                             }
                         }
-                        if selectedOutputDeviceUIDs.count == 2 {
+                        if selectedOutputDeviceUIDs.count >= 2 {
                             Picker("Playback Mode", selection: Binding(
                                 get: { SpeakerrStore.model.preferences.routingMode },
                                 set: { SpeakerrStore.model.setRoutingMode($0) }
@@ -430,7 +428,7 @@ struct ContentView: View {
                     }
                 }
             }
-            if selectedOutputDeviceUIDs.count == 2 {
+            if selectedOutputDeviceUIDs.count >= 2 {
                 Divider()
                 Button {
                     MainWindowCoordinator.shared.show()
@@ -1816,7 +1814,7 @@ struct ContentView: View {
     }
 
     private func syncEQToSpeakerrSession() {
-        guard selectedOutputDeviceUIDs.count == 2 else { return }
+        guard selectedOutputDeviceUIDs.count >= 2 else { return }
         let isBypassed = !eqModel.isEnabled || !eqModel.isEQFiltersEnabled
         if selectedEQTargetUID == "master" {
             SpeakerrStore.model.updateMasterEQ(bands: eqModel.parametricBands)
@@ -1830,10 +1828,8 @@ struct ContentView: View {
     private func toggleOutputDevice(_ device: AudioDevice) {
         if let idx = selectedOutputDeviceUIDs.firstIndex(of: device.uid) {
             selectedOutputDeviceUIDs.remove(at: idx)
-        } else if selectedOutputDeviceUIDs.count < 2 {
-            selectedOutputDeviceUIDs.append(device.uid)
         } else {
-            selectedOutputDeviceUIDs[1] = device.uid
+            selectedOutputDeviceUIDs.append(device.uid)
         }
     }
 
@@ -1865,8 +1861,8 @@ struct ContentView: View {
                 syncEQToEngine()
             }
 
-        } else if selectedOutputDeviceUIDs.count == 2 {
-            let validTargets = ["master", selectedOutputDeviceUIDs[0], selectedOutputDeviceUIDs[1]]
+        } else if selectedOutputDeviceUIDs.count >= 2 {
+            let validTargets = ["master"] + selectedOutputDeviceUIDs
             if !validTargets.contains(selectedEQTargetUID) {
                 selectedEQTargetUID = "master"
             }
@@ -1884,7 +1880,7 @@ struct ContentView: View {
     private func setOutputVolume(_ volume: Float, for device: AudioDevice, route: Int) {
         let clamped = min(max(volume, 0), 1)
         outputVolumes[device.uid] = clamped
-        if selectedOutputDeviceUIDs.count == 2, let route = selectedOutputDeviceUIDs.firstIndex(of: device.uid) {
+        if selectedOutputDeviceUIDs.count >= 2, let route = selectedOutputDeviceUIDs.firstIndex(of: device.uid) {
             SpeakerrStore.model.updateRouteVolume(route: route, volume: clamped)
         } else {
             eqModel.setVolume(clamped)
@@ -1901,7 +1897,7 @@ struct ContentView: View {
                 (device.uid, DeviceProfileManager.shared.profile(for: device.uid)?.volume ?? 1.0)
             }
         )
-        guard selectedOutputDeviceUIDs.count == 2 else { return }
+        guard selectedOutputDeviceUIDs.count >= 2 else { return }
         for device in selectedOutputDevices {
             guard let route = selectedOutputDeviceUIDs.firstIndex(of: device.uid) else { continue }
             SpeakerrStore.model.updateRouteVolume(route: route, volume: outputVolume(for: device))
@@ -1909,7 +1905,7 @@ struct ContentView: View {
     }
 
     private func preloadSpeakerrEQBands() {
-        guard selectedOutputDeviceUIDs.count == 2 else { return }
+        guard selectedOutputDeviceUIDs.count >= 2 else { return }
         if let masterProfile = DeviceProfileManager.shared.profile(for: "master") {
             SpeakerrStore.model.updateMasterEQ(bands: masterProfile.effectiveBands)
             SpeakerrStore.model.updateMasterEQBypass(!masterProfile.isEQEnabled || !masterProfile.isEQFiltersEnabled)
