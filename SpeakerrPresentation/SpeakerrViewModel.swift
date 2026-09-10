@@ -3,13 +3,6 @@ import Foundation
 import Observation
 import SpeakerrAudio
 
-public enum CalibrationTrace {
-    public static func log(_ message: String) {
-        let line = "[CalibrationTrace] \(message)\n"
-        FileHandle.standardError.write(Data(line.utf8))
-    }
-}
-
 public protocol MicrophonePermissionProviding: Sendable {
     func requestPermission() async -> Bool
 }
@@ -227,11 +220,9 @@ public final class SpeakerrViewModel {
     }
 
     public func calibrate() {
-        CalibrationTrace.log("SpeakerrViewModel.calibrate model=\(ObjectIdentifier(self)) availableInputs=\(availableInputs.count) preferredInput=\(preferences.preferredMicrophoneUID ?? "nil")")
         guard let inputUID = resolvedCalibrationInputUID else {
             presentation.statusDetail = "Choose a microphone before calibrating."
-            CalibrationTrace.log("SpeakerrViewModel.calibrate no input; writing isCalibrationPresented=true")
-            isCalibrationPresented = true
+            presentCalibration()
             return
         }
         preferences.preferredMicrophoneUID = inputUID
@@ -282,6 +273,10 @@ public final class SpeakerrViewModel {
             isBusy = false
             await refresh()
         }
+    }
+
+    public func presentCalibration() {
+        isCalibrationPresented = true
     }
 
     private var resolvedCalibrationInputUID: String? {

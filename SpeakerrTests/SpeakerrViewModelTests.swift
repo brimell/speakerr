@@ -99,6 +99,14 @@ final class SpeakerrViewModelTests: XCTestCase {
         XCTAssertEqual(fixture.model.preferences.preferredMicrophoneUID, "mic")
     }
 
+    func testPresentCalibrationSetsAuthoritativePresentationState() throws {
+        let fixture = try makeFixture(state: .ready, validCalibration: false)
+
+        XCTAssertFalse(fixture.model.isCalibrationPresented)
+        fixture.model.presentCalibration()
+        XCTAssertTrue(fixture.model.isCalibrationPresented)
+    }
+
     func testPassiveRefreshEquivalentToWindowCloseReopenDoesNotMutateSession() async throws {
         let fixture = try makeFixture(state: .aligned, validCalibration: true)
         await fixture.model.refresh()

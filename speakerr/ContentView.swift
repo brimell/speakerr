@@ -341,8 +341,7 @@ struct ContentView: View {
 
                     if selectedOutputDevices.count >= 2 {
                         Button {
-                            CalibrationTrace.log("ContentView compact Calibrate button action")
-                            SpeakerrStore.model.isCalibrationPresented = true
+                            SpeakerrStore.model.presentCalibration()
                             MainWindowCoordinator.shared.show()
                         } label: {
                             Label("Calibrate…", systemImage: "waveform.badge.mic")
