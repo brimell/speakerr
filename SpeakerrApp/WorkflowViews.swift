@@ -297,6 +297,8 @@ private func calibrationProgressDetails(_ update: CalibrationProgressUpdate?, sp
                 Text(speakerName).font(.headline)
                 Text("Speaker \(speakerIndex + 1) of \(max(1, speakerCount))")
                     .foregroundStyle(.secondary)
+                Text("Emission \(speakerIndex + 1) of \(max(1, speakerCount))")
+                    .foregroundStyle(.secondary)
                 Text("Measurement \(measurement) of \(totalMeasurements) · Pass \(pass) of \(totalPasses)")
                     .foregroundStyle(.secondary)
             }

@@ -525,6 +525,10 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             try Task.checkCancellation()
             for speaker in outputs.indices where values[speaker].count < configuration.measurementsPerSpeaker {
                 let measurementNumber = values[speaker].count + 1
+                let totalAttempts = outputs.count * maximumAttempts
+                let pendingAttemptFraction = totalAttempts > 0 ? Double(completedAttempts + 1) / Double(totalAttempts) : 1
+                let pendingFraction = (Double(pass) + pendingAttemptFraction) / Double(configuration.maximumPasses)
+                progress?(.init(phase: .measuring(speakerIndex: speaker, speakerName: outputs[speaker].name, pass: pass + 1, totalPasses: configuration.maximumPasses, measurement: measurementNumber, totalMeasurements: configuration.measurementsPerSpeaker), progressFraction: pendingFraction))
                 do {
                     let measurement = try await emitAndMeasure(pass: pass, sequence: attempt * outputs.count + speaker, speaker: speaker, configuration: configuration, microphone: microphone, reference: reference)
                     values[speaker].append(measurement)
@@ -540,7 +544,6 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                 // Each pass has a bounded number of attempts per speaker, including retries.
                 // Report completed attempt work rather than only valid measurements.
                 completedAttempts += 1
-                let totalAttempts = outputs.count * maximumAttempts
                 let attemptFraction = totalAttempts > 0 ? Double(completedAttempts) / Double(totalAttempts) : 1
                 let fraction = (Double(pass) + attemptFraction) / Double(configuration.maximumPasses)
                 progress?(.init(phase: .measuring(speakerIndex: speaker, speakerName: outputs[speaker].name, pass: pass + 1, totalPasses: configuration.maximumPasses, measurement: measurementNumber, totalMeasurements: configuration.measurementsPerSpeaker), progressFraction: fraction))
