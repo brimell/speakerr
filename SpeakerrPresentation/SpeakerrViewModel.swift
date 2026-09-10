@@ -191,7 +191,7 @@ public final class SpeakerrViewModel {
         let outputs = preferences.selectedSpeakerUIDs
         let input = preferences.programmeInputUID
         #if DEBUG
-        let level = 0.18
+        let level = 0.25
         #else
         let level = preferences.calibrationVolume
         #endif
@@ -263,7 +263,7 @@ public final class SpeakerrViewModel {
                 var configuration = CalibrationExperimentConfiguration()
                 configuration.measurementsPerSpeaker = preferences.measurementsPerSpeaker
                 #if DEBUG
-                configuration.level = 0.18
+                configuration.level = 0.25
                 #else
                 configuration.level = preferences.calibrationVolume
                 #endif
