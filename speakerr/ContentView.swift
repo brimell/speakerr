@@ -361,10 +361,14 @@ struct ContentView: View {
                     Text("Tip: Select a 2nd speaker to enable dual-speaker acoustic alignment.")
                         .font(.caption2)
                         .foregroundColor(.secondary)
-                } else if selectedOutputDevices.count >= 2 {
+                } else if selectedOutputDevices.count == 2 {
                     Text(usesStereoChannelTerminology
-                         ? "Dual-speaker aligned pair active: Left (Ch 1) • Right (Ch 2)"
-                         : "Dual-speaker aligned pair active: Speaker 1 • Speaker 2")
+                         ? "Two-speaker aligned pair active: Left (Ch 1) • Right (Ch 2)"
+                         : "Two-speaker aligned pair active: Speaker 1 • Speaker 2")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                } else if selectedOutputDevices.count > 2 {
+                    Text("\(selectedOutputDevices.count)-speaker aligned group active")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }

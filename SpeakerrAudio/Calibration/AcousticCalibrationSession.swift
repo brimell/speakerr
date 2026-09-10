@@ -211,7 +211,7 @@ public final class AcousticCalibrationSession: @unchecked Sendable {
             do {
                 bySpeaker[event.speakerIndex].append(try measure(event: event, captured: captured, reference: reference))
             } catch {
-                failures.append("pass=\(pass + 1) sequence=\(event.sequence + 1) speaker=\(event.speakerIndex == 0 ? "A" : "B"): \(error.localizedDescription)")
+                failures.append("pass=\(pass + 1) sequence=\(event.sequence + 1) speaker=\(outputs[event.speakerIndex].name): \(error.localizedDescription)")
             }
         }
         for index in outputs.indices where bySpeaker[index].count < configuration.measurementsPerSpeaker {

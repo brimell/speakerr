@@ -273,7 +273,7 @@ func calibrationPhaseText(_ update: CalibrationProgressUpdate) -> String {
     case .measuring(_, let name, let pass, let totalPasses, let measurement, let totalMeasurements):
         "Measuring \(name) — measurement \(measurement) of \(totalMeasurements), calibration pass \(pass) of \(totalPasses)"
     case .applyingCorrection: "Applying correction…"
-    case .verifying: "Verifying alignment…"
+    case .verifying(let pass): "Verifying alignment — calibration pass \(pass)…"
     }
 }
 
