@@ -289,6 +289,9 @@ func calibrationProgressView(_ update: CalibrationProgressUpdate?) -> some View 
 }
 
 func calibrationProgressFraction(_ update: CalibrationProgressUpdate) -> Double? {
+    if let progressFraction = update.progressFraction {
+        return min(1, max(0, progressFraction))
+    }
     switch update.phase {
     case .measuring(_, _, _, _, let measurement, let totalMeasurements):
         guard totalMeasurements > 0 else { return nil }

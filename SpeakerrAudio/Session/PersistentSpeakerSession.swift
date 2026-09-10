@@ -481,7 +481,10 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             try Task.checkCancellation()
             for speaker in outputs.indices where values[speaker].count < configuration.measurementsPerSpeaker {
                 let measurementNumber = values[speaker].count + 1
-                progress?(.init(phase: .measuring(speakerIndex: speaker, speakerName: outputs[speaker].name, pass: pass + 1, totalPasses: configuration.maximumPasses, measurement: measurementNumber, totalMeasurements: configuration.measurementsPerSpeaker)))
+                let completedMeasurements = (pass * outputs.count * configuration.measurementsPerSpeaker) + (speaker * configuration.measurementsPerSpeaker) + measurementNumber
+                let totalMeasurements = configuration.maximumPasses * outputs.count * configuration.measurementsPerSpeaker
+                let fraction = totalMeasurements > 0 ? Double(completedMeasurements) / Double(totalMeasurements) : nil
+                progress?(.init(phase: .measuring(speakerIndex: speaker, speakerName: outputs[speaker].name, pass: pass + 1, totalPasses: configuration.maximumPasses, measurement: measurementNumber, totalMeasurements: configuration.measurementsPerSpeaker), progressFraction: fraction))
                 do { values[speaker].append(try await emitAndMeasure(pass: pass, sequence: attempt * outputs.count + speaker, speaker: speaker, configuration: configuration, microphone: microphone, reference: reference)) }
                 catch { failures.append("pass=\(pass + 1) attempt=\(attempt + 1) speaker=\(speaker): \(error.localizedDescription)") }
             }
