@@ -227,6 +227,8 @@ public final class SpeakerrViewModel {
         calibrationTask?.cancel()
         calibrationOutcome = .none
         calibrationProgress = nil
+        latestRecheckResidual = nil
+        latestRecheckResiduals = []
         isBusy = true
         calibrationTask = Task { [weak self] in
             guard let self else { return }
@@ -243,9 +245,9 @@ public final class SpeakerrViewModel {
                 let passes = try await controller.calibrate(inputUID: inputUID, configuration: configuration) { [weak self] update in
                     Task { @MainActor in self?.calibrationProgress = update }
                 }
-                let residual = abs(passes.last?.relativeArrivalBMinusAMilliseconds ?? 0)
+                let residuals = passes.last?.relativeArrivalsToReferenceMilliseconds ?? []
+                let residual = (residuals.max() ?? 0) - (residuals.min() ?? 0)
                 calibrationOutcome = .success(residualMilliseconds: residual)
-                latestRecheckResidual = nil
             } catch is CancellationError {
                 calibrationOutcome = .cancelled
             } catch let error as CalibrationSessionError {
