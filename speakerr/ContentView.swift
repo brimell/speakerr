@@ -341,6 +341,7 @@ struct ContentView: View {
 
                     if selectedOutputDevices.count >= 2 {
                         Button {
+                            SpeakerrStore.model.isCalibrationPresented = true
                             MainWindowCoordinator.shared.show()
                         } label: {
                             Label("Calibrate…", systemImage: "waveform.badge.mic")
