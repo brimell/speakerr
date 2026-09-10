@@ -1,6 +1,6 @@
 # speakerr
 
-A free, open-source macOS system-wide 10-band parametric equalizer, now including an early native multi-speaker synchronisation prototype.
+A free, open-source macOS system-wide 10-band parametric equalizer with native two-speaker playback, microphone calibration, and synchronization.
 
 speakerr sits in your menu bar and applies real-time EQ processing to all system audio, letting you fine-tune your listening experience across any app.
 
@@ -46,6 +46,12 @@ Main Menu:
 - **Configurable Latency & Buffer Controls** - Tune I/O buffer size, ring buffer capacity, and target queue depth to balance latency vs stability on your system
 - **Undo / Redo** - Full undo/redo history for EQ band changes (Cmd+Z / Cmd+Shift+Z)
 - **Settings Export / Import** - Back up and restore all app settings, custom presets, and device profiles as a JSON file
+- **Two-Speaker Playback** - Run a synchronized stereo pair through one native CoreAudio session
+- **Speaker Routing Modes** - Use stereo-preserving or mono-broadcast routing with independent per-speaker EQ and volume
+- **Microphone Calibration** - Measure acoustic arrival times from the listening position and apply fractional-delay compensation
+- **Calibration Recheck** - Recheck alignment without stopping the audio session, with explicit correction when needed
+- **Lifecycle Recovery** - Detect speaker disconnects, reconnects, sample-rate changes, and wake events; rebuild the route and mark calibration stale
+- **Native Menu-Bar Controller** - Select speakers and inputs, start/stop playback, calibrate, recheck, and inspect timing diagnostics
 
 ## Requirements
 
@@ -53,13 +59,22 @@ Main Menu:
 - Xcode 16 or later
 - [BlackHole 2ch](https://github.com/ExistentialAudio/BlackHole) virtual audio driver for the existing system-wide EQ path
 
-## Multi-speaker prototype
+## Two-speaker playback and synchronization
 
-Phases 0 and 1 provide a `speakerr-test` command-line diagnostic. It enumerates CoreAudio outputs and microphones, automatically creates a temporary two-device aggregate output, enables drift compensation, and plays a repeating transient with independent fractional delay for each speaker.
+Speakerr supports a synchronized pair of physical output devices. The menu-bar app selects exactly two speakers, creates a private CoreAudio aggregate, enables drift compensation for the secondary device, and keeps one persistent output session for programme audio and calibration. Each speaker has its own fractional delay, EQ chain, volume, and channel mapping.
+
+The app can:
+
+- route BlackHole system audio to both selected speakers;
+- preserve stereo or broadcast mono to both outputs;
+- calibrate arrival-time differences from the laptop microphone;
+- recover from speaker reconnects and sleep/wake events by rebuilding the route;
+- retain delay values while correctly marking calibration stale until it is rechecked; and
+- restore the previous macOS output route when playback stops.
 
 > **Listening position:** speakerr assumes you are standing or sitting at the position of your laptop. Keep the laptop at your listening position during calibration and playback; the sync is intended to sound correct from there.
 
-The CLI path does not require BlackHole or CamillaDSP. Build and run it with:
+The CLI diagnostics remain available for device discovery, manual playback, calibration, and system-audio testing. The direct calibration/playback commands do not require CamillaDSP; programme audio requires BlackHole (or another stereo virtual/loopback input).
 
 ```bash
 xcodegen generate
@@ -68,9 +83,9 @@ xcodebuild -project speakerr.xcodeproj -scheme speakerr-test -configuration Debu
 /tmp/speakerr-build/Build/Products/Debug/speakerr-test play
 ```
 
-See [Phase 0–1 prototype](docs/PHASE_0_1.md) for architecture, controls, limitations, tests, and the two-speaker reproduction procedure.
+See [two-speaker playback](docs/PHASE_0_1.md) for routing architecture, controls, constraints, tests, and the reproduction procedure.
 
-Phases 2–5 add automatic microphone-based calibration through `speakerr-test calibrate`. See [Phase 2–5 calibration](docs/PHASE_2_5.md) for the host-time timing model, CLI options, estimator limits, and measured Bose/MIDDLETON stability results.
+See [microphone calibration](docs/PHASE_2_5.md) for the host-time timing model, estimator limits, CLI options, and measured Bose/MIDDLETON results. See [device lifecycle and system-audio playback](docs/PHASE_6_8A.md) and the [native UI architecture](docs/UI_PHASE.md) for the integrated application behavior.
 
 ## Installation
 
@@ -88,11 +103,11 @@ Or download directly from [BlackHole Releases](https://github.com/ExistentialAud
 
 Visit the website for screenshots and a quick feature overview:
 
-- [https://brimell.github.io/SoundMax/](https://brimell.github.io/SoundMax/)
+- [https://brimell.github.io/speakerr/](https://brimell.github.io/speakerr/)
 
 **Option A: Download Release (Recommended)**
 
-1. Download the latest DMG from [Releases](https://github.com/brimell/SoundMax/releases)
+1. Download the latest DMG from [Releases](https://github.com/brimell/speakerr/releases)
 2. Open the DMG and drag speakerr to Applications
 3. If macOS blocks the app: Right-click → Open → Open
 
@@ -368,7 +383,7 @@ cp .env.example .env
 
 Common fields:
 
-- `GITHUB_REPOSITORY` (for example `brimell/SoundMax`)
+- `GITHUB_REPOSITORY` (for example `brimell/speakerr`)
 - `GH_TOKEN` or `GITHUB_TOKEN` (optional if `gh auth login` is already set up)
 - `RELEASE_TAG`, `RELEASE_TITLE`, `RELEASE_NOTES`
 - `RELEASE_SKIP_BUILD=true` if you want upload-only by default

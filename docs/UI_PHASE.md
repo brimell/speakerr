@@ -10,7 +10,7 @@
 The UI phase delivers a native macOS menu-bar and desktop control interface for the `SpeakerrAudio` CoreAudio engine. The design adheres strictly to the following principles:
 
 1. **Target Separation and Safety:**
-   - The legacy `speakerr` application target (the prototype EQ application) remains completely untouched and independent.
+   - The legacy `speakerr` application target remains independent of the native two-speaker session.
    - A dedicated static framework, `SpeakerrPresentation`, encapsulates view models, presentation state mapping, and session control abstraction.
    - A modern SwiftUI menu-bar app target, `SpeakerrMenuApp` (`Speakerr.app`, bundle identifier `com.brimell.speakerr.menu`, `LSUIElement: true`), provides the user interface.
 2. **Deterministic State Derivation:**

@@ -1,6 +1,8 @@
-# Speakerr Phase 0–1 prototype
+# Speakerr two-speaker playback and routing
 
-This is the command-line proof of concept for device discovery and simultaneous two-output playback. It deliberately stops before microphone calibration and before adding multi-speaker controls to the SwiftUI app.
+Status: implemented and integrated into the menu-bar application and `speakerr-test` diagnostics.
+
+This documents the native CoreAudio two-speaker playback path. The same routing backend is used by the menu-bar app and the CLI diagnostics; microphone calibration and system-audio playback are documented in the later sections.
 
 ## What works
 
@@ -17,14 +19,13 @@ This is the command-line proof of concept for device discovery and simultaneous 
 
 The implementation has been exercised with Bose SoundLink Max and Marshall MIDDLETON Bluetooth speakers at 44.1 kHz. The temporary aggregate exposed four independent channels and was absent again after shutdown.
 
-## What is not implemented
+## Current constraints
 
-- Microphone recording, chirp generation, cross-correlation, acoustic delay estimation, confidence scoring, or automatic calibration.
-- System audio through the new two-output backend. The existing app still supports BlackHole → EQ → one physical output; `speakerr-test` generates its own signal directly.
-- Persistence of multi-speaker selections or delays.
-- Disconnect/reconnect recovery or automatic reconstruction of a running route.
-- More than two simultaneous outputs, independent per-speaker gain, or nesting an existing Aggregate/Multi-Output Device.
-- CamillaDSP integration, a custom virtual audio driver, or continuous synchronisation from programme audio.
+- Exactly two physical output devices are supported per synchronized group.
+- System-audio input requires BlackHole or another stereo virtual/loopback input.
+- More than two simultaneous outputs and nesting an existing Aggregate/Multi-Output Device are not supported.
+- Continuous automatic drift correction during programme playback is not enabled; use calibration or an explicit recheck/correction.
+- CamillaDSP and a custom virtual audio driver are not required or included.
 
 ## Architecture
 

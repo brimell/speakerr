@@ -1,4 +1,4 @@
-# Phase 2–5: microphone-based acoustic calibration
+# Microphone-based acoustic calibration
 
 Status: implemented and hardware-tested on 4 September 2026.
 
@@ -22,7 +22,7 @@ Status: implemented and hardware-tested on 4 September 2026.
 12. optionally writes microphone/reference WAV files and JSON metadata; and
 13. optionally measures fixed-compensation stability at 0, 30, 60, 120, and 300 seconds.
 
-No SwiftUI calibration UI or system-audio routing was added. The existing EQ application and Phase 0/1 playback backend remain unchanged.
+The calibration engine is used by both the menu-bar calibration sheet and `speakerr-test`. It runs within the persistent two-speaker output session, so ordinary programme playback resumes without rebuilding the aggregate.
 
 ## Audio and timing architecture
 
@@ -51,7 +51,7 @@ relativeArrival =
 
 Computing the two host-referenced acoustic latencies and subtracting them is algebraically equivalent to that expression. CLI scheduling latency, pass analysis time, and the time taken to invoke the next command are not part of the result. Polling sleeps are used only to learn that a pre-scheduled pass has finished; they never establish an audio timestamp.
 
-The current prototype requires the microphone's native nominal rate to match the aggregate rate. Bose, MIDDLETON, and the built-in Mac microphone all ran at 44.1 kHz during these tests. A mismatched input fails clearly instead of silently applying an unverified clock conversion or sample-rate conversion.
+The microphone's native nominal rate must match the aggregate rate for acoustic calibration. Bose, MIDDLETON, and the built-in Mac microphone all ran at 44.1 kHz during these tests. A mismatched input fails clearly instead of silently applying an unverified clock conversion or sample-rate conversion.
 
 ## Calibration signal
 
@@ -187,7 +187,7 @@ Add `--stability` to run the fixed-compensation 0/30/60/120/300-second sequence.
 - Normalised cross-correlation can still fail if the direct path is much weaker than a reflection, the room is very noisy, a speaker heavily suppresses the chirp band, or two plausible peaks have similar strength.
 - The current confidence thresholds are based on synthetic cases and this one room/device pair; broader hardware validation is needed.
 - No GCC-PHAT, band-pass preprocessing, automatic gain adaptation, device reconnect handling, or persistence is part of this phase.
-- Delays are active only for the life of `speakerr-test`; system audio capture remains out of scope.
+- Calibrated delays remain active for the current persistent speaker session and are invalidated when the route is rebuilt; the menu-bar app prompts for a fresh calibration.
 - Stability measurements observe and report drift but intentionally do not correct it.
 - The CLI does not silently accept non-convergence. Run 2 demonstrates the bounded failure path.
 

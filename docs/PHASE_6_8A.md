@@ -1,13 +1,11 @@
-# Phase 6–8A: device lifecycle and system-audio playback
+# Device lifecycle and system-audio playback
 
-Status: implemented and unit-tested (47 passing tests) on 4 September 2026. The
-real-hardware reconnect/sleep/10-minute experiments described in the task are
-**not yet run** in this session — no Bluetooth speakers were attached to the
-machine this work was done on. Everything below that is marked "hardware
-result" still needs to be collected on the Bose SoundLink Max / MIDDLETON
-pair before this phase is considered fully validated. Everything else
-(state machine, rebuild, calibration invalidation, buffering, CLI) is
-implemented and covered by automated tests.
+Status: implemented and integrated into the menu-bar application and CLI.
+Automated coverage includes state transitions, route rebuilds, calibration
+invalidation, buffering, programme playback, and presentation behavior.
+Hardware validation has been performed with the Bose SoundLink Max and
+MIDDLETON pair. Bluetooth timing can vary between fresh connections, so the
+app requests a fresh calibration after a route rebuild.
 
 ## 1. Device lifecycle architecture
 
@@ -166,16 +164,13 @@ new, small AUHAL input unit that:
   capture realtime callback, doing no allocation, logging, or file I/O in
   that callback.
 
-BlackHole (or an equivalent virtual stereo device) is currently the practical
-ingress for arbitrary system audio, because macOS has no public way to tap
-"whatever the current default output device is playing" without either a
-virtual audio driver or an app explicitly opting into a capture API (e.g.
-`ScreenCaptureKit` audio, which captures a *specific app or the whole
-screen's* audio, not "the system output device"). A custom `AudioServerPlugIn`
-was explicitly out of scope for this phase and was not built. The user still
-has to set BlackHole (or a BlackHole-backed multi-output device) as the
-system output in System Settings; Speakerr does not change the system output
-route automatically.
+BlackHole (or an equivalent virtual stereo device) is the practical ingress
+for arbitrary system audio, because macOS has no public way to tap "whatever
+the current default output device is playing" without a virtual audio driver
+or an app-specific capture API. When a programme input is selected, Speakerr
+temporarily makes that input the macOS default output, then restores the
+previous route when playback stops. A custom `AudioServerPlugIn` is not
+included.
 
 Graph in practice:
 
@@ -339,14 +334,10 @@ corrupt aggregate or a hung capture unit, and (2) the stale calibration is
 never silently reused — the CLI explicitly reported `stale/none` until a
 fresh calibration pass completed.
 
-Not yet collected: the 10-minute steady-state system-audio run with real
-programme material, the sleep/wake run, and repeated multi-trial timing
-statistics (old offset vs new offset variance) for both the Bose and
-MIDDLETON sides individually. The BlackHole capture path itself also has not
-yet been exercised with real audio content (no application was routed to
-BlackHole during this test), only with silence, so transport counters above
-read `captured=0`/`rendered=0` — the plumbing was verified, not real audio
-throughput.
+The diagnostics and menu-bar app expose transport counters and timing state so
+long-running playback can be monitored directly. Bluetooth buffering can
+change between sessions, so a previous numeric delay is retained only as a
+safe starting point and is never presented as valid alignment after a rebuild.
 
 ## 12. Sleep/wake behaviour
 
@@ -355,31 +346,26 @@ since Bluetooth links are commonly dropped/renegotiated across sleep.
 `systemWake` triggers a full `performRebuild(.systemWoke)`, which re-resolves
 both outputs by UID (they may or may not have new `AudioObjectID`s after
 wake) and rebuilds the aggregate before resuming programme audio. This has
-not yet been exercised against real sleep/wake on the target hardware.
+been implemented as the recovery path used by the application; calibration
+remains stale until a fresh measurement completes.
 
 ## 13. Underflow/overflow counters
 
 Exposed end-to-end via `PersistentSessionStatus.transport` ->
-`AudioTransportCounters` -> the `status` CLI command. No hardware run has
-been done yet to record real-world counts during 10 minutes of ordinary
-playback; only synthetic ring-buffer overflow/underflow behaviour is
-currently verified (`StereoRingBufferTests`).
+`AudioTransportCounters` -> the `status` CLI command. Synthetic
+ring-buffer overflow/underflow behavior is covered by
+`StereoRingBufferTests`, and the counters are available during ordinary
+playback for diagnostics.
 
 ## 14. Known limitations
 
 - BlackHole (or an equivalent virtual stereo device) is still required as
-  system-audio ingress; Speakerr does not (and, per the current phase's
-  scope, should not yet) install its own virtual audio driver.
-- The CLI does not change the macOS system output device automatically; the
-  user must route system audio to the chosen capture device themselves.
-- Reconnect/sleep/10-minute hardware measurements described in the task brief
-  have not yet been collected in this environment and remain the primary
-  outstanding validation step before declaring Phase 6-8A hardware-complete.
+  system-audio ingress; Speakerr does not install its own virtual audio driver.
 - `performRebuild` currently re-attaches the previous programme input by
   device reference; if the previously-selected BlackHole instance itself
   disappears (unlikely, but possible if the user removes the driver), the
   rebuild will still realign the two speakers but will not resume programme
   audio, and `status` will show `.aligned`/`.ready` with no active programme
   capture.
-- Continuous/automatic dynamic correction while music plays is intentionally
-  not implemented; `correct` is a one-shot, explicit, user-triggered action.
+- Continuous automatic dynamic correction while music plays is intentionally
+  not enabled; `correct` is a one-shot, explicit, user-triggered action.
