@@ -479,6 +479,50 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         }
     }
 
+    #if DEBUG
+    public func runMiddletonDiagnostic(input: InputDevice, progress: @escaping @Sendable (Int) -> Void) async throws -> String {
+        guard running, let reference, let renderState else { throw AudioRoutingError.notConfigured }
+        guard let speaker = outputs.firstIndex(where: { $0.name.localizedCaseInsensitiveContains("MIDDLETON") }) else {
+            throw AudioRoutingError.outputNotConfigured("Select the existing MIDDLETON route first")
+        }
+        guard abs(probeLevel - 0.12) < 1e-9 else { throw CalibrationSessionError.invalidConfiguration }
+        guard abs(input.sampleRate - sampleRate) < 0.01 else { throw CalibrationSessionError.requiresMatchingSampleRates(output: sampleRate, input: input.sampleRate) }
+        let configuration = CalibrationExperimentConfiguration()
+        try configuration.validateSchedule(signalDurationSeconds: reference.durationSeconds)
+        diagnosticRunID = UUID().uuidString
+        diagnosticInputUID = input.id
+        diagnosticInputName = input.name
+        programmeCapture?.pause()
+        transport.discardAll()
+        renderState.setMode(.calibration)
+        defer { resumeProgramme() }
+        let microphone = try ContinuousMicrophoneCapture(device: input, sampleRate: sampleRate, maximumDurationSeconds: 180)
+        microphoneCapture = microphone
+        defer { microphone.stop(); microphoneCapture = nil }
+        try microphone.start()
+        try await waitForRenderedFrames(renderState.renderedFrames.load(ordering: .acquiring) + Int64(configuration.preRollSeconds * sampleRate))
+        var measurements: [AcousticMeasurement] = []
+        var errors: [String] = []
+        for attempt in 0..<20 {
+            try Task.checkCancellation()
+            do {
+                let measurement = try await emitAndMeasure(pass: 0, sequence: attempt * outputs.count + speaker, speaker: speaker, configuration: configuration, microphone: microphone, reference: reference)
+                measurements.append(measurement)
+            } catch is CancellationError { throw CancellationError() }
+            catch { errors.append("attempt \(attempt + 1): \(error.localizedDescription)") }
+            progress(attempt + 1)
+            // emitAndMeasure already waits for the complete probe, acoustic tail, and guard.
+        }
+        let directory = URL(fileURLWithPath: "/tmp/speakerr-calibration-diagnostics").appendingPathComponent(diagnosticRunID)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(measurements).write(to: directory.appendingPathComponent("measurements.json"), options: .atomic)
+        try encoder.encode(errors).write(to: directory.appendingPathComponent("errors.json"), options: .atomic)
+        return directory.path
+    }
+    #endif
+
     public func recheck(input: InputDevice, configuration: CalibrationExperimentConfiguration = .init()) async throws -> CalibrationPassMeasurements {
         guard calibrationIsValid else { throw CalibrationSessionError.didNotConverge(residualMilliseconds: .infinity) }
         programmeCapture?.pause(); transport.discardAll(); renderState?.setMode(.calibration)
@@ -686,7 +730,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             // Preserve the full capture up to this emission, including startup and pre-emission noise.
-            try CalibrationDiagnosticWriter.writeWAV(samples: captured.samples, sampleRate: sampleRate, to: directory.appendingPathComponent("\(stem)_waveform.wav"))
+            try CalibrationDiagnosticWriter.writeFloatWAV(samples: captured.samples, sampleRate: sampleRate, to: directory.appendingPathComponent("\(stem)_waveform.wav"))
             let origin = Double(sliceStart) - scheduledInput
             for (name, curve) in [("A", diagnostics.aSignedCorrelations), ("B", diagnostics.bSignedCorrelations), ("combined", diagnostics.combinedSignedCorrelations)] {
                 let lines = curve.indices.map { index in

@@ -274,34 +274,30 @@ public final class SpeakerrViewModel {
                     }
                 }
                 guard calibrationRunID == runID else { return }
-                if let pass = passes.last {
-                    calibrationSpeakerResults = pass.summariesBySpeaker.enumerated().map { index, summary in
-                        let speakerUID = preferences.selectedSpeakerUIDs.indices.contains(index) ? preferences.selectedSpeakerUIDs[index] : nil
-                        let speaker = availableOutputs.first(where: { $0.id == speakerUID })
-                        let measurements = pass.measurementsBySpeaker[index]
-                        let confidence = measurements.map(\.estimate.confidence).reduce(0, +) / Double(max(1, measurements.count))
-                        return CalibrationSpeakerResult(id: speaker?.id ?? "speaker-\(index + 1)", speakerName: speaker?.name ?? "Speaker \(index + 1)", detectedLatencyMilliseconds: summary.medianMilliseconds, confidence: confidence)
+                let finalPass = passes.last
+                let snapshot = try? await controller.snapshot()
+                if let pass = finalPass {
+                    calibrationSpeakerResults = pass.speakerEstimates.enumerated().map { index, estimate in
+                        let speaker = snapshot?.selectedOutputs.indices.contains(index) == true ? snapshot?.selectedOutputs[index] : nil
+                        return CalibrationSpeakerResult(id: speaker?.id ?? "speaker-\(index + 1)", speakerName: speaker?.name ?? "Speaker \(index + 1)", detectedLatencyMilliseconds: estimate.delayMilliseconds, confidence: estimate.confidence, quality: estimate.quality, measurementCount: estimate.measurementCount, acceptedMeasurementCount: estimate.acceptedMeasurementCount, spreadMilliseconds: estimate.summary?.spreadMilliseconds, evidenceCount: estimate.clusterMembers.count)
+                    }
+                    let applied = pass.canApplyCompensation && snapshot?.status?.state == .aligned
+                    // Recheck arrivals already contain the applied delay. Do not add it a second time.
+                    let arrivals = pass.speakerEstimates.compactMap(\.delayMilliseconds)
+                    if applied, arrivals.count == pass.speakerEstimates.count {
+                        let center = (try? RobustMeasurementSummary(values: arrivals).medianMilliseconds) ?? 0
+                        let rows = arrivals.indices.map { index in
+                            CalibrationCompletionDiagnostic(speakerIndex: index, speakerName: calibrationSpeakerResults[index].speakerName, arrivalMilliseconds: arrivals[index], appliedDelayMilliseconds: snapshot?.status?.delays[index].calibration ?? 0, residualMilliseconds: arrivals[index] - center)
+                        }
+                        calibrationCompletion = CalibrationCompletionDiagnostics(speakers: rows, residualSpreadMilliseconds: pass.residualSpreadMilliseconds ?? 0)
+                    }
+                    if applied && passes.allSatisfy({ $0.quality == .high }) {
+                        calibrationOutcome = .success(residualMilliseconds: pass.residualSpreadMilliseconds ?? 0)
+                    } else {
+                        calibrationOutcome = .estimated(residualMilliseconds: applied ? pass.residualSpreadMilliseconds : nil, applied: applied, residualQuality: pass.quality)
                     }
                 }
                 calibrationAttempts = passes.flatMap(\.attempts)
-                let finalPass = passes.last
-                let snapshot = try? await controller.snapshot()
-                if let finalPass {
-                    let arrivals = finalPass.summariesBySpeaker.map(\.medianMilliseconds)
-                    let appliedDelays = arrivals.indices.map { index in
-                        snapshot?.status?.delays.indices.contains(index) == true ? snapshot?.status?.delays[index].calibration ?? 0 : 0
-                    }
-                    let correctedArrivals = arrivals.indices.map { arrivals[$0] + appliedDelays[$0] }
-                    let center = correctedArrivals.reduce(0, +) / Double(max(1, correctedArrivals.count))
-                    let rows = correctedArrivals.indices.map { index in
-                        CalibrationCompletionDiagnostic(speakerIndex: index, speakerName: snapshot?.selectedOutputs.indices.contains(index) == true ? snapshot?.selectedOutputs[index].name ?? "Speaker \(index + 1)" : "Speaker \(index + 1)", arrivalMilliseconds: arrivals[index], appliedDelayMilliseconds: appliedDelays[index], residualMilliseconds: correctedArrivals[index] - center)
-                    }
-                    let spread = (correctedArrivals.max() ?? 0) - (correctedArrivals.min() ?? 0)
-                    calibrationCompletion = CalibrationCompletionDiagnostics(speakers: rows, residualSpreadMilliseconds: spread)
-                }
-                let residuals = passes.last?.relativeArrivalsToReferenceMilliseconds ?? []
-                let residual = (residuals.max() ?? 0) - (residuals.min() ?? 0)
-                calibrationOutcome = .success(residualMilliseconds: residual)
             } catch is CancellationError {
                 guard calibrationRunID == runID else { return }
                 calibrationOutcome = .cancelled
@@ -320,6 +316,32 @@ public final class SpeakerrViewModel {
             await refresh()
         }
     }
+
+    public private(set) var latestRecheckQuality: CalibrationQuality?
+    public private(set) var canApplyLatestCorrection = false
+    #if DEBUG
+    public private(set) var diagnosticMessage: String?
+    public func runMiddletonDiagnostic() {
+        guard !isBusy, let inputUID = resolvedCalibrationInputUID else { return }
+        isBusy = true
+        diagnosticMessage = "MIDDLETON diagnostic: 0 / 20"
+        calibrationTask = Task { [weak self] in
+            guard let self else { return }
+            defer { isBusy = false }
+            guard await microphonePermissionProvider.requestPermission() else {
+                microphonePermissionDenied = true
+                return
+            }
+            do {
+                let path = try await controller.runMiddletonDiagnostic(inputUID: inputUID) { [weak self] count in
+                    Task { @MainActor in self?.diagnosticMessage = "MIDDLETON diagnostic: \(count) / 20" }
+                }
+                diagnosticMessage = "20 measurements complete. Delays retained. Artifacts: \(path)"
+            } catch is CancellationError { diagnosticMessage = "Diagnostic cancelled. Delays retained." }
+            catch { diagnosticMessage = error.localizedDescription }
+        }
+    }
+    #endif
 
     public func presentCalibration() {
         isCalibrationPresented = true
@@ -346,7 +368,9 @@ public final class SpeakerrViewModel {
                 configuration.measurementsPerSpeaker = 1
                 let result = try await controller.recheck(inputUID: inputUID, configuration: configuration)
                 latestRecheckResiduals = result.relativeArrivalsToReferenceMilliseconds
-                latestRecheckResidual = latestRecheckResiduals.max()! - latestRecheckResiduals.min()!
+                latestRecheckResidual = result.residualSpreadMilliseconds
+                latestRecheckQuality = result.quality
+                canApplyLatestCorrection = result.canApplyCompensation
             } catch { present(error) }
             isBusy = false
             await refresh()
@@ -354,7 +378,7 @@ public final class SpeakerrViewModel {
     }
 
     public func applyLatestCorrection() {
-        guard let residual = latestRecheckResidual else { return }
+        guard canApplyLatestCorrection, let residual = latestRecheckResidual else { return }
         Task {
             do {
                 try await controller.applyDynamicCorrections(residuals: latestRecheckResiduals.isEmpty ? [0, residual] : latestRecheckResiduals)

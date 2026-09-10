@@ -25,6 +25,9 @@ public protocol SpeakerSessionControlling: Sendable {
     func start(outputUIDs: [String], programmeInputUID: String?, calibrationLevel: Double, routingMode: SpeakerRoutingMode) async throws
     func stop() async
     func calibrate(inputUID: String, configuration: CalibrationExperimentConfiguration, progress: @escaping @Sendable (CalibrationProgressUpdate) -> Void) async throws -> [CalibrationPassMeasurements]
+    #if DEBUG
+    func runMiddletonDiagnostic(inputUID: String, progress: @escaping @Sendable (Int) -> Void) async throws -> String
+    #endif
     func recheck(inputUID: String, configuration: CalibrationExperimentConfiguration) async throws -> CalibrationPassMeasurements
     func applyDynamicCorrection(residualMilliseconds: Double) async throws
     func applyDynamicCorrections(residuals: [Double]) async throws
@@ -133,6 +136,13 @@ public actor CoreAudioSpeakerSessionController: SpeakerSessionControlling {
         return try await session.performCalibration(input: input, configuration: configuration, progress: progress)
     }
 
+    #if DEBUG
+    public func runMiddletonDiagnostic(inputUID: String, progress: @escaping @Sendable (Int) -> Void) async throws -> String {
+        guard let session else { throw SessionControllerError.sessionNotRunning }
+        return try await session.runMiddletonDiagnostic(input: resolveInput(uid: inputUID), progress: progress)
+    }
+    #endif
+
     public func recheck(inputUID: String, configuration: CalibrationExperimentConfiguration) async throws -> CalibrationPassMeasurements {
         guard let session else { throw SessionControllerError.sessionNotRunning }
         return try await session.recheck(input: resolveInput(uid: inputUID), configuration: configuration)
@@ -235,3 +245,11 @@ private final class SystemOutputRoute: @unchecked Sendable {
         }
     }
 }
+
+#if DEBUG
+public extension SpeakerSessionControlling {
+    func runMiddletonDiagnostic(inputUID: String, progress: @escaping @Sendable (Int) -> Void) async throws -> String {
+        throw SessionControllerError.sessionNotRunning
+    }
+}
+#endif

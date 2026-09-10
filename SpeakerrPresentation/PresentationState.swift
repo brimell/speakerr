@@ -42,6 +42,7 @@ public enum CalibrationOutcome: Sendable, Equatable {
     case nonConverged(residualMilliseconds: Double, canKeepCurrentAlignment: Bool)
     case lowConfidence(message: String)
     case cancelled
+    case estimated(residualMilliseconds: Double?, applied: Bool, residualQuality: CalibrationQuality)
 }
 
 public struct CalibrationCompletionDiagnostic: Sendable, Equatable, Identifiable {
@@ -74,14 +75,24 @@ public struct CalibrationCompletionDiagnostics: Sendable, Equatable {
 public struct CalibrationSpeakerResult: Sendable, Equatable, Identifiable {
     public let id: String
     public let speakerName: String
-    public let detectedLatencyMilliseconds: Double
+    public let detectedLatencyMilliseconds: Double?
     public let confidence: Double
+    public let quality: CalibrationQuality
+    public let measurementCount: Int
+    public let acceptedMeasurementCount: Int
+    public let spreadMilliseconds: Double?
+    public let evidenceCount: Int
 
-    public init(id: String, speakerName: String, detectedLatencyMilliseconds: Double, confidence: Double) {
+    public init(id: String, speakerName: String, detectedLatencyMilliseconds: Double?, confidence: Double, quality: CalibrationQuality = .high, measurementCount: Int = 0, acceptedMeasurementCount: Int = 0, spreadMilliseconds: Double? = nil, evidenceCount: Int = 0) {
         self.id = id
         self.speakerName = speakerName
         self.detectedLatencyMilliseconds = detectedLatencyMilliseconds
         self.confidence = confidence
+        self.quality = quality
+        self.measurementCount = measurementCount
+        self.acceptedMeasurementCount = acceptedMeasurementCount
+        self.spreadMilliseconds = spreadMilliseconds
+        self.evidenceCount = evidenceCount
     }
 }
 
@@ -165,6 +176,7 @@ public enum PresentationStateMapper {
     }
 
     public static func calibration(for engineState: SpeakerSessionState, snapshot: CalibrationSnapshot?, calibrationIsValid: Bool, progress: CalibrationProgressUpdate? = nil, outcome: CalibrationOutcome = .none) -> CalibrationPresentation {
+        if case .estimated = outcome { return .failed(outcome) }
         if outcome.isFailed { return .failed(outcome) }
         switch engineState {
         case .calibrating: return .running(progress)
@@ -173,6 +185,7 @@ public enum PresentationStateMapper {
         case .ready: return .ready
         case .aligned where calibrationIsValid:
             guard let snapshot else { return .required(reason: "Calibration is required for this speaker session.") }
+            if snapshot.quality != .high { return .failed(.estimated(residualMilliseconds: snapshot.residualMilliseconds, applied: true, residualQuality: snapshot.residualQuality)) }
             return .valid(residualMilliseconds: snapshot.residualMilliseconds, confidence: snapshot.confidence, calibratedAt: snapshot.calibratedAt)
         case .failed:
             return outcome == .none ? .failed(.lowConfidence(message: "Speakerr could not complete the audio operation.")) : .failed(outcome)

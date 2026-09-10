@@ -317,5 +317,6 @@ func calibrationOutcomeText(_ outcome: CalibrationOutcome) -> String {
     case .nonConverged(let residual, _): "Speakerr could not fully align the speakers. Current residual: \(residual.formatted(.number.precision(.fractionLength(2)))) ms."
     case .lowConfidence(let message): message
     case .cancelled: "Calibration was cancelled."
+    case .estimated(_, let applied, _): applied ? "Provisional alignment applied. Estimated accuracy may be reduced." : "Timing estimates available. Previous delays retained."
     }
 }

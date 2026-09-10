@@ -69,6 +69,14 @@ struct CalibrationSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             content
+            #if DEBUG
+            if let message = model.diagnosticMessage { Text(message).font(.caption).textSelection(.enabled) }
+            if !model.isBusy {
+                Text("For the diagnostic: keep MIDDLETON and the Mac stationary, use the same microphone and hardware volume, avoid volume keys, and keep the room quiet for all 20 measurements.").font(.caption).foregroundStyle(.secondary)
+                Button("Run MIDDLETON Diagnostic ×20") { model.runMiddletonDiagnostic() }
+                    .disabled(!model.presentation.speakers.contains { $0.name.localizedCaseInsensitiveContains("MIDDLETON") } || model.availableInputs.isEmpty)
+            }
+            #endif
             if !model.calibrationAttempts.isEmpty {
                 diagnostics
             }
@@ -94,6 +102,7 @@ struct CalibrationSheet: View {
                 .foregroundStyle(.secondary)
         } else {
             switch model.calibrationOutcome {
+            case .estimated(let residual, let applied, let quality): estimated(residual: residual, applied: applied, residualQuality: quality)
             case .success(let residual): success(residual, results: model.calibrationSpeakerResults)
             case .nonConverged(let residual, let canKeep): nonConvergence(residual, canKeep: canKeep)
             case .lowConfidence(let message): lowConfidence(message)
@@ -132,8 +141,8 @@ struct CalibrationSheet: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(result.speakerName).font(.headline)
                     HStack {
-                        LabeledContent("Detected") { Text("\(result.detectedLatencyMilliseconds, format: .number.precision(.fractionLength(1))) ms").monospacedDigit() }
-                        LabeledContent("Confidence") { Text(calibrationConfidenceLabel(result.confidence)) }
+                        LabeledContent("Detected") { Text(result.detectedLatencyMilliseconds.map { String(format: "%.1f ms", $0) } ?? "Unavailable").monospacedDigit() }
+                        LabeledContent("Confidence") { Text("High") }
                     }
                 }
             }
@@ -141,6 +150,40 @@ struct CalibrationSheet: View {
             Text("\(residual, format: .number.precision(.fractionLength(2))) ms")
                 .font(.system(size: 30, weight: .semibold, design: .rounded)).monospacedDigit()
             Text(residual <= 1 ? "Excellent alignment" : residual <= 2 ? "Aligned" : "Slight offset")
+        }
+    }
+
+    private func estimated(residual: Double?, applied: Bool, residualQuality: CalibrationQuality) -> some View {
+        Group {
+            Label(applied ? "Provisional alignment applied" : "Best available timing estimates", systemImage: "exclamationmark.triangle")
+                .font(.title2.weight(.semibold)).foregroundStyle(.orange)
+            Text(applied ? "Estimated accuracy may be reduced. Retry calibration for better accuracy." : "The measurements are too uncertain to apply automatically. Previous delays were retained.")
+                .foregroundStyle(.secondary)
+            ForEach(model.calibrationSpeakerResults) { result in
+                VStack(alignment: .leading, spacing: 3) {
+                    LabeledContent(result.speakerName) {
+                        Text(result.detectedLatencyMilliseconds.map { String(format: "%.2f ms", $0) } ?? "No usable estimate")
+                    }
+                    Text("\(qualityLabel(result.quality)) · confidence \(result.confidence, specifier: "%.3f") · \(result.acceptedMeasurementCount) / \(result.measurementCount) accepted")
+                        .font(.caption)
+                    if let spread = result.spreadMilliseconds {
+                        Text("\(result.evidenceCount) supporting measurements · chosen spread \(spread, specifier: "%.2f") ms").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if let residual {
+                Text("Measured post-alignment residual: \(residual, specifier: "%.2f") ms · \(qualityLabel(residualQuality))")
+                if residual > 2 { Text("The measured residual is still above the 2 ms alignment target.").foregroundStyle(.orange) }
+            }
+        }
+    }
+
+    private func qualityLabel(_ quality: CalibrationQuality) -> String {
+        switch quality {
+        case .high: "High confidence"
+        case .provisional: "Provisional — low confidence"
+        case .poor: "Very low confidence"
+        case .unavailable: "No usable estimate"
         }
     }
 
@@ -170,7 +213,7 @@ struct CalibrationSheet: View {
     private var diagnostics: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let completion = model.calibrationCompletion {
-                Text("Completed Calibration").font(.headline)
+                Text("Measured Alignment").font(.headline)
                 Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 4) {
                     GridRow {
                         Text("Speaker").font(.caption.weight(.semibold))
@@ -269,8 +312,8 @@ struct CalibrationSheet: View {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 switch model.calibrationOutcome {
-                case .success:
-                    Button("Calibrate Again") { model.calibrate() }
+                case .success, .estimated:
+                    Button("Retry calibration") { model.calibrate() }
                         .buttonStyle(.bordered)
                         .disabled(model.availableInputs.isEmpty)
                     Button("Done") { dismiss() }
