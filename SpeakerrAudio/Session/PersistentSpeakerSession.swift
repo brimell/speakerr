@@ -50,6 +50,11 @@ final class PersistentRenderState: @unchecked Sendable {
     private let routingMode: SpeakerRoutingMode
 
     init(sampleRate: Double, chirp: [Float], transport: StereoRingBuffer, channelCounts: [Int], delays initialDelays: [Double], routingMode: SpeakerRoutingMode) throws {
+        #if DEBUG
+        precondition(channelCounts.count >= 2, "Persistent render state requires at least two routes")
+        precondition(initialDelays.count == channelCounts.count, "Persistent render state delay count must match route count")
+        precondition(channelCounts.allSatisfy { $0 > 0 }, "Persistent render state routes must have channels")
+        #endif
         self.sampleRate = sampleRate
         self.chirp = chirp
         self.transport = transport
@@ -79,6 +84,14 @@ final class PersistentRenderState: @unchecked Sendable {
 
     func setDelay(index: Int, milliseconds: Double) throws { try delays[index].setDelay(milliseconds: milliseconds) }
 
+    var delayLineCount: Int { delays.count }
+
+    func assignmentDescription(for route: Int) -> String {
+        guard assignments.indices.contains(route) else { return "invalid(route=\(route))" }
+        let assignment = assignments[route]
+        return "route=\(route) offset=\(assignment.offset) channels=\(assignment.count)"
+    }
+
     func setMasterEQBands(_ bands: [EQBand]) {
         masterEQ.setBands(bands)
     }
@@ -104,6 +117,9 @@ final class PersistentRenderState: @unchecked Sendable {
     }
 
     func requestEmission(speaker: Int) -> UInt64 {
+        #if DEBUG
+        precondition(assignments.indices.contains(speaker), "Emission speaker index is outside the render routes")
+        #endif
         emissionSpeaker.store(speaker, ordering: .relaxed)
         emissionStartFrame.store(-1, ordering: .relaxed)
         emissionHostTime.store(0, ordering: .relaxed)
@@ -194,6 +210,9 @@ final class PersistentRenderState: @unchecked Sendable {
         if request != observedEmission {
             observedEmission = request
             activeEmissionSpeaker = emissionSpeaker.load(ordering: .relaxed)
+            #if DEBUG
+            precondition(assignments.indices.contains(activeEmissionSpeaker), "Active emission speaker index is outside the render routes")
+            #endif
             activeEmissionStart = blockEnd + 512
             emissionStartFrame.store(activeEmissionStart, ordering: .releasing)
         }
@@ -321,8 +340,17 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         do {
             let aggregate = try aggregateManager.create(outputs: outputs)
             sampleRate = aggregate.sampleRate
+            #if DEBUG
+            precondition(aggregate.channelCounts.count == outputs.count, "Aggregate channel-count entries must match outputs")
+            precondition(aggregate.driftCompensatedUIDs.count == max(0, outputs.count - 1), "Every non-master output must use drift compensation")
+            #endif
+            calibrationLogger.notice("Calibration session creation outputs.count=\(self.outputs.count, privacy: .public) outputNames=\(self.outputs.map(\.name), privacy: .public) outputUIDs=\(self.outputUIDs, privacy: .public) aggregateSubdeviceCount=\(aggregate.channelCounts.count, privacy: .public) aggregate.channelCounts=\(aggregate.channelCounts, privacy: .public) aggregate.driftCompensatedUIDs=\(aggregate.driftCompensatedUIDs, privacy: .public)")
             let chirp = try GolayComplementaryPairGenerator(level: calibrationLevel).generate(sampleRate: sampleRate)
             let state = try PersistentRenderState(sampleRate: sampleRate, chirp: chirp.samples, transport: transport, channelCounts: aggregate.channelCounts, delays: delayComponents.map(\.effectiveMilliseconds), routingMode: routingMode)
+            #if DEBUG
+            precondition(delayComponents.count == outputs.count, "Delay components must match outputs")
+            #endif
+            calibrationLogger.notice("Calibration render creation OutputChannelMap assignments=\(self.outputs.indices.map { state.assignmentDescription(for: $0) }, privacy: .public) delayComponents.count=\(self.delayComponents.count, privacy: .public) renderState.delayLineCount=\(state.delayLineCount, privacy: .public)")
             if let master = pendingMasterBands { state.setMasterEQBands(master) }
             state.setMasterEQBypass(pendingMasterBypass)
             for (route, bands) in pendingRouteBands { state.setRouteEQBands(route: route, bands: bands) }
@@ -485,6 +513,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
     private func measurePass(pass: Int, configuration: CalibrationExperimentConfiguration, microphone: ContinuousMicrophoneCapture, reference: CalibrationSignal, progress: (@Sendable (CalibrationProgressUpdate) -> Void)?) async throws -> CalibrationPassMeasurements {
         var values = outputs.map { _ in [AcousticMeasurement]() }
         var failures: [String] = []
+        var attempts: [CalibrationAttemptDiagnostic] = []
         let maximumAttempts = configuration.measurementsPerSpeaker + configuration.maximumRetriesPerSpeaker
         var completedAttempts = 0
         for attempt in 0..<maximumAttempts {
@@ -492,11 +521,15 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             for speaker in outputs.indices where values[speaker].count < configuration.measurementsPerSpeaker {
                 let measurementNumber = values[speaker].count + 1
                 do {
-                    values[speaker].append(try await emitAndMeasure(pass: pass, sequence: attempt * outputs.count + speaker, speaker: speaker, configuration: configuration, microphone: microphone, reference: reference))
+                    let measurement = try await emitAndMeasure(pass: pass, sequence: attempt * outputs.count + speaker, speaker: speaker, configuration: configuration, microphone: microphone, reference: reference)
+                    values[speaker].append(measurement)
+                    attempts.append(CalibrationAttemptDiagnostic(pass: pass + 1, attempt: attempt + 1, speakerIndex: speaker, speakerName: outputs[speaker].name, measuredLatencyMilliseconds: measurement.acousticLatencyMilliseconds, peak: measurement.estimate.peakValue, secondBestPeak: measurement.estimate.secondBestPeak, prominence: measurement.estimate.peakProminence, confidence: measurement.estimate.confidence, accepted: true))
                 } catch {
                     let detail = calibrationFailureDetail(error, sampleRate: sampleRate)
                     let message = "pass=\(pass + 1) attempt=\(attempt + 1) speaker=\(outputs[speaker].name): \(detail)"
+                    calibrationLogger.error("Calibration measurement result speakerIndex=\(speaker, privacy: .public) speakerName=\(self.outputs[speaker].name, privacy: .public) detectedLatencyMilliseconds=unavailable peak=unavailable prominence=unavailable confidence=unavailable failureReason=\(detail, privacy: .public)")
                     failures.append(message)
+                    attempts.append(rejectedAttemptDiagnostic(pass: pass + 1, attempt: attempt + 1, speaker: speaker, error: error))
                     calibrationLogger.error("Calibration rejected \(message, privacy: .public)")
                 }
                 // Each pass has a bounded number of attempts per speaker, including retries.
@@ -511,12 +544,23 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         for speaker in outputs.indices where values[speaker].count < configuration.measurementsPerSpeaker {
             throw CalibrationSessionError.insufficientValidMeasurements(speaker: outputs[speaker].name, valid: values[speaker].count, required: configuration.measurementsPerSpeaker)
         }
-        return try CalibrationPassMeasurements(pass: pass, measurementsBySpeaker: values, failures: failures)
+        return try CalibrationPassMeasurements(pass: pass, measurementsBySpeaker: values, failures: failures, attempts: attempts)
+    }
+
+    private func rejectedAttemptDiagnostic(pass: Int, attempt: Int, speaker: Int, error: Error) -> CalibrationAttemptDiagnostic {
+        if case .lowConfidence(let confidence, let peak, let secondBestPeak, let prominence, let sampleOffset) = error as? DelayEstimatorError {
+            return CalibrationAttemptDiagnostic(pass: pass, attempt: attempt, speakerIndex: speaker, speakerName: outputs[speaker].name, measuredLatencyMilliseconds: sampleOffset * 1_000 / sampleRate, peak: peak, secondBestPeak: secondBestPeak, prominence: prominence, confidence: confidence, accepted: false, failureReason: error.localizedDescription)
+        }
+        return CalibrationAttemptDiagnostic(pass: pass, attempt: attempt, speakerIndex: speaker, speakerName: outputs[speaker].name, measuredLatencyMilliseconds: nil, peak: nil, secondBestPeak: nil, prominence: nil, confidence: nil, accepted: false, failureReason: error.localizedDescription)
     }
 
     private func applyResiduals(_ residuals: [Double]) throws {
+        #if DEBUG
+        precondition(residuals.count == delayComponents.count, "N-speaker residual count must match delay components")
+        #endif
+        guard residuals.count == delayComponents.count else { throw CalibrationSessionError.invalidConfiguration }
         guard let maximum = residuals.max() else { return }
-        for (index, residual) in residuals.enumerated() where index < delayComponents.count {
+        for (index, residual) in residuals.enumerated() {
             let old = delayComponents[index]
             let delay = maximum - residual
             try setDelayComponents(index: index, value: DelayComponents(manual: old.manual, calibration: old.calibration + delay, dynamicCorrection: old.dynamicCorrection))
@@ -526,12 +570,14 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
     private func emitAndMeasure(pass: Int, sequence: Int, speaker: Int, configuration: CalibrationExperimentConfiguration, microphone: ContinuousMicrophoneCapture, reference: CalibrationSignal) async throws -> AcousticMeasurement {
         guard let renderState else { throw AudioRoutingError.notConfigured }
         let request = renderState.requestEmission(speaker: speaker)
+        calibrationLogger.notice("Calibration emission requested speakerIndex=\(speaker, privacy: .public) speakerName=\(self.outputs[speaker].name, privacy: .public) actualAggregateChannelAssignment=\(renderState.assignmentDescription(for: speaker), privacy: .public) emissionRequestID=\(request, privacy: .public)")
         while renderState.emissionHostTime.load(ordering: .acquiring) == 0 || renderState.requestedEmission.load(ordering: .acquiring) != request {
             try checkRenderStatus()
             try await Task.sleep(nanoseconds: 10_000_000)
         }
         let host = renderState.emissionHostTime.load(ordering: .acquiring)
         let startFrame = renderState.emissionStartFrame.load(ordering: .acquiring)
+        calibrationLogger.notice("Calibration emission scheduled speakerIndex=\(speaker, privacy: .public) speakerName=\(self.outputs[speaker].name, privacy: .public) actualAggregateChannelAssignment=\(renderState.assignmentDescription(for: speaker), privacy: .public) emissionRequestID=\(request, privacy: .public) emissionStartFrame=\(startFrame, privacy: .public) emissionHostTime=\(host, privacy: .public)")
         let durationSeconds = Double(reference.samples.count) / sampleRate
         let waitSeconds = durationSeconds + configuration.maximumAcousticLatencySeconds + 0.1
         try await Task.sleep(nanoseconds: UInt64(max(0, waitSeconds) * 1_000_000_000))
@@ -545,6 +591,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         let recording = Array(captured.samples[sliceStart..<sliceEnd])
         let lower = max(0, Int(floor(scheduledInput)) - sliceStart - preSearch)
         let upper = min(recording.count - reference.samples.count + 1, searchEnd - sliceStart)
+        calibrationLogger.notice("Calibration measurement scheduled speakerIndex=\(speaker, privacy: .public) speakerName=\(self.outputs[speaker].name, privacy: .public) scheduledHostTime=\(host, privacy: .public) microphoneSampleIndex=\(scheduledInput, privacy: .public) searchWindowStart=\(lower, privacy: .public) searchWindowEnd=\(upper, privacy: .public)")
         let estimate: DelayEstimate
         if let (a, b) = reference.complementarySequences {
             estimate = try estimator.estimateDelay(referenceA: a, referenceB: b, recording: recording, sampleRate: sampleRate, interSequenceSilenceSamples: reference.interSequenceSilenceSamples, searchRange: lower..<upper)
@@ -553,6 +600,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         }
         let arrivalHost = try captured.hostTime(atSampleIndex: Double(sliceStart) + estimate.sampleOffset)
         let latency = Double(Int64(AudioConvertHostTimeToNanos(arrivalHost)) - Int64(AudioConvertHostTimeToNanos(host))) / 1_000_000
+        calibrationLogger.notice("Calibration measurement result speakerIndex=\(speaker, privacy: .public) speakerName=\(self.outputs[speaker].name, privacy: .public) detectedLatencyMilliseconds=\(latency, privacy: .public) peak=\(estimate.peakValue, privacy: .public) prominence=\(estimate.peakProminence, privacy: .public) confidence=\(estimate.confidence, privacy: .public) failureReason=none")
         emissionSequence += 1
         return AcousticMeasurement(emission: CalibrationEmission(pass: pass, sequence: emissionSequence, speakerIndex: speaker, scheduledOutputFrame: startFrame, scheduledOutputHostTime: host), arrivalHostTime: arrivalHost, acousticLatencyMilliseconds: latency, estimate: estimate)
     }

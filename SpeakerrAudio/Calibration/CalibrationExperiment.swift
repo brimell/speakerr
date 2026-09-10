@@ -126,6 +126,35 @@ public struct AcousticMeasurement: Sendable, Equatable, Codable {
     public let estimate: DelayEstimate
 }
 
+public struct CalibrationAttemptDiagnostic: Sendable, Equatable, Codable, Identifiable {
+    public var id: String { "\(pass)-\(speakerIndex)-\(attempt)" }
+    public let pass: Int
+    public let attempt: Int
+    public let speakerIndex: Int
+    public let speakerName: String
+    public let measuredLatencyMilliseconds: Double?
+    public let peak: Double?
+    public let secondBestPeak: Double?
+    public let prominence: Double?
+    public let confidence: Double?
+    public let accepted: Bool
+    public let failureReason: String?
+
+    public init(pass: Int, attempt: Int, speakerIndex: Int, speakerName: String, measuredLatencyMilliseconds: Double?, peak: Double?, secondBestPeak: Double?, prominence: Double?, confidence: Double?, accepted: Bool, failureReason: String? = nil) {
+        self.pass = pass
+        self.attempt = attempt
+        self.speakerIndex = speakerIndex
+        self.speakerName = speakerName
+        self.measuredLatencyMilliseconds = measuredLatencyMilliseconds
+        self.peak = peak
+        self.secondBestPeak = secondBestPeak
+        self.prominence = prominence
+        self.confidence = confidence
+        self.accepted = accepted
+        self.failureReason = failureReason
+    }
+}
+
 public struct CalibrationPassMeasurements: Sendable, Equatable, Codable {
     public let pass: Int
     public let measurementsA: [AcousticMeasurement]
@@ -136,12 +165,13 @@ public struct CalibrationPassMeasurements: Sendable, Equatable, Codable {
     public let relativeArrivalBMinusAMilliseconds: Double
     public let measurementsBySpeaker: [[AcousticMeasurement]]
     public let summariesBySpeaker: [RobustMeasurementSummary]
+    public let attempts: [CalibrationAttemptDiagnostic]
 
-    public init(pass: Int, measurementsA: [AcousticMeasurement], measurementsB: [AcousticMeasurement], failures: [String]) throws {
-        try self.init(pass: pass, measurementsBySpeaker: [measurementsA, measurementsB], failures: failures)
+    public init(pass: Int, measurementsA: [AcousticMeasurement], measurementsB: [AcousticMeasurement], failures: [String], attempts: [CalibrationAttemptDiagnostic] = []) throws {
+        try self.init(pass: pass, measurementsBySpeaker: [measurementsA, measurementsB], failures: failures, attempts: attempts)
     }
 
-    public init(pass: Int, measurementsBySpeaker: [[AcousticMeasurement]], failures: [String]) throws {
+    public init(pass: Int, measurementsBySpeaker: [[AcousticMeasurement]], failures: [String], attempts: [CalibrationAttemptDiagnostic] = []) throws {
         guard measurementsBySpeaker.count >= 2 else { throw CalibrationMathError.noMeasurements }
         self.pass = pass
         self.measurementsBySpeaker = measurementsBySpeaker
@@ -152,6 +182,7 @@ public struct CalibrationPassMeasurements: Sendable, Equatable, Codable {
         summaryA = summariesBySpeaker[0]
         summaryB = summariesBySpeaker[1]
         relativeArrivalBMinusAMilliseconds = summaryB.medianMilliseconds - summaryA.medianMilliseconds
+        self.attempts = attempts
     }
 
     public var relativeArrivalsToReferenceMilliseconds: [Double] {
@@ -162,6 +193,7 @@ public struct CalibrationPassMeasurements: Sendable, Equatable, Codable {
     private enum CodingKeys: String, CodingKey {
         case pass, measurementsA, measurementsB, failures, summaryA, summaryB
         case relativeArrivalBMinusAMilliseconds, measurementsBySpeaker, summariesBySpeaker
+        case attempts
     }
 
     public init(from decoder: Decoder) throws {
@@ -175,6 +207,7 @@ public struct CalibrationPassMeasurements: Sendable, Equatable, Codable {
         relativeArrivalBMinusAMilliseconds = try values.decode(Double.self, forKey: .relativeArrivalBMinusAMilliseconds)
         measurementsBySpeaker = try values.decodeIfPresent([[AcousticMeasurement]].self, forKey: .measurementsBySpeaker) ?? [measurementsA, measurementsB]
         summariesBySpeaker = try values.decodeIfPresent([RobustMeasurementSummary].self, forKey: .summariesBySpeaker) ?? [summaryA, summaryB]
+        attempts = try values.decodeIfPresent([CalibrationAttemptDiagnostic].self, forKey: .attempts) ?? []
     }
 }
 
