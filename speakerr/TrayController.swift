@@ -104,7 +104,28 @@ final class TrayController: NSObject {
                 title: SpeakerrStore.playback?.isRunning == true ? "Stop Audio Engine" : "Start Audio Engine",
                 action: #selector(toggleAudio))
 
-        addItem(to: menu, title: "Switch Output Device", action: #selector(cycleOutput))
+        let outputItem = NSMenuItem(title: "Output Speakers", action: nil, keyEquivalent: "")
+        let outputSubmenu = NSMenu(title: "Output Speakers")
+        deviceManager.refreshDevices()
+        let currentUIDs = SpeakerrStore.playback?.selectedOutputUIDs ?? []
+        for device in deviceManager.outputDevices {
+            let item = NSMenuItem(title: device.name, action: #selector(toggleOutputDeviceMenuItem(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = device.uid
+            if currentUIDs.contains(device.uid) {
+                item.state = .on
+            }
+            outputSubmenu.addItem(item)
+        }
+        if !deviceManager.outputDevices.isEmpty {
+            outputSubmenu.addItem(.separator())
+        }
+        let clearItem = NSMenuItem(title: "Clear Speaker Selection", action: #selector(clearOutputDevicesMenuItem), keyEquivalent: "")
+        clearItem.target = self
+        clearItem.isEnabled = !currentUIDs.isEmpty
+        outputSubmenu.addItem(clearItem)
+        outputItem.submenu = outputSubmenu
+        menu.addItem(outputItem)
 
         menu.addItem(.separator())
 
@@ -144,6 +165,23 @@ final class TrayController: NSObject {
 
     @objc private func toggleAudio() {
         SpeakerrStore.playback?.togglePlayback()
+    }
+
+    @objc private func toggleOutputDeviceMenuItem(_ sender: NSMenuItem) {
+        guard let uid = sender.representedObject as? String else { return }
+        var uids = SpeakerrStore.playback?.selectedOutputUIDs ?? []
+        if let idx = uids.firstIndex(of: uid) {
+            uids.remove(at: idx)
+        } else if uids.count < 2 {
+            uids.append(uid)
+        } else {
+            uids[1] = uid
+        }
+        SpeakerrStore.playback?.selectOutputs(uids)
+    }
+
+    @objc private func clearOutputDevicesMenuItem() {
+        SpeakerrStore.playback?.selectOutputs([])
     }
 
     @objc private func cycleOutput() {

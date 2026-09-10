@@ -173,6 +173,19 @@ class EQModel: ObservableObject {
             hasDeviceProfile = true
         } else {
             hasDeviceProfile = false
+            isLoadingProfile = true
+            parametricBands = EQBand.defaultTenBand
+            preGain = 0.0
+            outputGain = 0.0
+            limiterEnabled = false
+            limiterCeilingDB = -1.0
+            autoStopClippingEnabled = false
+            isEnabled = true
+            isEQFiltersEnabled = true
+            selectedBuiltInPreset = .flat
+            selectedCustomPreset = nil
+            pendingCustomPresetID = nil
+            isLoadingProfile = false
         }
 
         clearHistory()

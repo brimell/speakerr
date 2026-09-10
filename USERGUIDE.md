@@ -29,6 +29,8 @@ A complete guide to setting up and using speakerr, your system-wide audio equali
 5. Click **Start**
 6. Adjust the EQ sliders to taste
 
+> **Multi-speaker sync:** speakerr assumes you are standing or sitting at the position of your laptop. Keep the laptop at your intended listening position during calibration and playback so the speaker timing is correct where you are listening.
+
 ---
 
 ## Installation

@@ -57,6 +57,8 @@ Main Menu:
 
 Phases 0 and 1 provide a `speakerr-test` command-line diagnostic. It enumerates CoreAudio outputs and microphones, automatically creates a temporary two-device aggregate output, enables drift compensation, and plays a repeating transient with independent fractional delay for each speaker.
 
+> **Listening position:** speakerr assumes you are standing or sitting at the position of your laptop. Keep the laptop at your listening position during calibration and playback; the sync is intended to sound correct from there.
+
 The CLI path does not require BlackHole or CamillaDSP. Build and run it with:
 
 ```bash
