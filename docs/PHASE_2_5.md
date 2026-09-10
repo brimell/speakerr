@@ -58,7 +58,7 @@ The microphone's native nominal rate must match the aggregate rate for acoustic 
 The default signal is a deterministic logarithmic chirp:
 
 - 500 Hz to 12 kHz;
-- 300 ms;
+- 30 ms during the fast calibration schedule;
 - 10 ms Hann-shaped fade-in and fade-out;
 - `0.12` default digital level, configurable from `0` to `0.5`;
 - `0.08` used for the hardware experiments below.
@@ -67,7 +67,7 @@ The generator validates Nyquist limits, duration, and safe level. It produces th
 
 ## Estimator and confidence
 
-The initial estimator is zero-mean normalised cross-correlation. Correlation is calculated as an FFT convolution, with sliding recording energy derived from prefix sums. It searches only the expected acoustic-latency window (currently 0–800 ms, with 20 ms of pre-search tolerance).
+The initial estimator is zero-mean normalised cross-correlation. Correlation is calculated as an FFT convolution, with sliding recording energy derived from prefix sums. It searches only the expected acoustic-latency window (currently 0–80 ms, with 20 ms of pre-search tolerance).
 
 The reported peak position uses three-point parabolic interpolation. Internal values retain sample/sub-sample precision; CLI formatting does not alter the compensation value.
 
@@ -183,7 +183,7 @@ Add `--stability` to run the fixed-compensation 0/30/60/120/300-second sequence.
 ## Known limits and failure cases
 
 - Input and aggregate sample rates must currently match exactly.
-- The expected acoustic latency window is capped at 800 ms.
+- The expected acoustic latency window is capped at 80 ms.
 - Normalised cross-correlation can still fail if the direct path is much weaker than a reflection, the room is very noisy, a speaker heavily suppresses the chirp band, or two plausible peaks have similar strength.
 - The current confidence thresholds are based on synthetic cases and this one room/device pair; broader hardware validation is needed.
 - No GCC-PHAT, band-pass preprocessing, automatic gain adaptation, device reconnect handling, or persistence is part of this phase.

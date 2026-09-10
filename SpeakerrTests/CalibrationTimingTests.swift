@@ -29,7 +29,7 @@ final class CalibrationTimingTests: XCTestCase {
         var configuration = CalibrationExperimentConfiguration()
         configuration.level = 0.8
         XCTAssertThrowsError(try configuration.validate())
-        configuration = CalibrationExperimentConfiguration(intervalSeconds: 0.5)
+        configuration = CalibrationExperimentConfiguration(intervalSeconds: 0.1)
         XCTAssertThrowsError(try configuration.validate())
     }
 
