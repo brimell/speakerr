@@ -199,9 +199,9 @@ struct CalibrationSheet: View {
 
     private func qualityLabel(_ quality: CalibrationQuality) -> String {
         switch quality {
-        case .high: "High quality"
-        case .medium: "Medium quality"
-        case .low: "Low quality"
+        case .high: "High confidence"
+        case .provisional: "Provisional — low confidence"
+        case .poor: "Very low confidence"
         case .unavailable: "No usable estimate"
         }
     }
@@ -336,11 +336,6 @@ struct CalibrationSheet: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-    }
-
-    private func calibrationProgressView(_ update: CalibrationProgressUpdate?) -> some View {
-        ProgressView(value: update?.progress ?? 0, total: 1.0)
-            .progressViewStyle(.linear)
     }
 
     @ViewBuilder
