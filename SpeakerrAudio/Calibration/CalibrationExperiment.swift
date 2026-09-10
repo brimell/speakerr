@@ -17,7 +17,7 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
     public init(
         preRollSeconds: Double = 0.2,
         chirpDurationSeconds: Double = 0.16,
-        intervalSeconds: Double = 0.40,
+        intervalSeconds: Double = 0.55,
         passGapSeconds: Double = 0,
         postRollSeconds: Double = 0.08,
         measurementsPerSpeaker: Int = 3,
@@ -46,7 +46,7 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
     public func validate() throws {
         guard preRollSeconds >= 0,
               chirpDurationSeconds > 0,
-              intervalSeconds > chirpDurationSeconds + maximumAcousticLatencySeconds,
+              intervalSeconds > maximumAcousticLatencySeconds,
               passGapSeconds >= 0,
               postRollSeconds >= maximumAcousticLatencySeconds,
               measurementsPerSpeaker > 0,
@@ -59,6 +59,13 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
             throw CalibrationSessionError.invalidConfiguration
         }
         guard level > 0, level <= 0.5 else { throw CalibrationSignalError.invalidLevel }
+    }
+
+    public func validateSchedule(signalDurationSeconds: Double, safetyGuardSeconds: Double = 0.03) throws {
+        guard signalDurationSeconds > 0,
+              intervalSeconds >= signalDurationSeconds + maximumAcousticLatencySeconds + safetyGuardSeconds else {
+            throw CalibrationSessionError.invalidConfiguration
+        }
     }
 
     public var eventsPerPass: Int { selectedSpeakerCount * (measurementsPerSpeaker + maximumRetriesPerSpeaker) }

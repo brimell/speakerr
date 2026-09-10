@@ -25,7 +25,7 @@ public struct CalibrationSignal: Sendable, Equatable {
 }
 
 public struct GolayComplementaryPairGenerator: CalibrationSignalGenerator, Sendable {
-    public let sequenceDurationSeconds: Double
+    public let golayOrder: Int
     public let interSequenceSilenceSeconds: Double
     public let lowFrequency: Double
     public let highFrequency: Double
@@ -33,14 +33,14 @@ public struct GolayComplementaryPairGenerator: CalibrationSignalGenerator, Senda
     public let level: Double
 
     public init(
-        sequenceDurationSeconds: Double = 0.16,
+        golayOrder: Int = 13,
         interSequenceSilenceSeconds: Double = 0.03,
         lowFrequency: Double = 700,
         highFrequency: Double = 10_000,
         fadeSeconds: Double = 0.003,
         level: Double = pow(10, -12 / 20)
     ) {
-        self.sequenceDurationSeconds = sequenceDurationSeconds
+        self.golayOrder = golayOrder
         self.interSequenceSilenceSeconds = interSequenceSilenceSeconds
         self.lowFrequency = lowFrequency
         self.highFrequency = highFrequency
@@ -54,8 +54,7 @@ public struct GolayComplementaryPairGenerator: CalibrationSignalGenerator, Senda
             throw CalibrationSignalError.invalidFrequencyRange
         }
 
-        guard sequenceDurationSeconds > 0, interSequenceSilenceSeconds >= 0,
-              fadeSeconds >= 0, fadeSeconds * 2 <= sequenceDurationSeconds else {
+        guard golayOrder > 0, interSequenceSilenceSeconds >= 0, fadeSeconds >= 0 else {
             throw CalibrationSignalError.invalidDuration
         }
         guard level > 0, level <= 1.0 else { throw CalibrationSignalError.invalidLevel }
@@ -63,10 +62,12 @@ public struct GolayComplementaryPairGenerator: CalibrationSignalGenerator, Senda
         // An order-13 pair is 8192 chips: 170.7 ms at 48 kHz without a
         // zero-order hold that would introduce a 6 kHz spectral null.
         let silenceCount = Int((interSequenceSilenceSeconds * sampleRate).rounded())
-        let chipsA = Self.golay(order: 13).0
-        let chipsB = Self.golay(order: 13).1
+        let chipsA = Self.golay(order: golayOrder).0
+        let chipsB = Self.golay(order: golayOrder).1
         let rawA = chipsA
         let rawB = chipsB
+        let sequenceDuration = Double(chipsA.count) / sampleRate
+        guard fadeSeconds * 2 <= sequenceDuration else { throw CalibrationSignalError.invalidDuration }
         let filteredA = Self.bandLimit(rawA, sampleRate: sampleRate, low: lowFrequency, high: highFrequency, fadeSeconds: fadeSeconds)
         let filteredB = Self.bandLimit(rawB, sampleRate: sampleRate, low: lowFrequency, high: highFrequency, fadeSeconds: fadeSeconds)
         let peak = max(filteredA.map { abs($0) }.max() ?? 0, filteredB.map { abs($0) }.max() ?? 0)
@@ -170,7 +171,7 @@ public struct LogarithmicChirpGenerator: CalibrationSignalGenerator, Sendable {
         guard durationSeconds > 0, fadeSeconds >= 0, fadeSeconds * 2 <= durationSeconds else {
             throw CalibrationSignalError.invalidDuration
         }
-        guard level > 0, level <= 1.0 else { throw CalibrationSignalError.invalidLevel }
+        guard level > 0, level <= 0.5 else { throw CalibrationSignalError.invalidLevel }
 
         let sampleCount = Int((durationSeconds * sampleRate).rounded())
         let fadeCount = min(Int((fadeSeconds * sampleRate).rounded()), sampleCount / 2)

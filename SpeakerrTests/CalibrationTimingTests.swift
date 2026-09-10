@@ -30,7 +30,8 @@ final class CalibrationTimingTests: XCTestCase {
         configuration.level = 0.8
         XCTAssertThrowsError(try configuration.validate())
         configuration = CalibrationExperimentConfiguration(intervalSeconds: 0.1)
-        XCTAssertThrowsError(try configuration.validate())
+        try? configuration.validate()
+        XCTAssertThrowsError(try configuration.validateSchedule(signalDurationSeconds: 8_192 * 2 / 44_100 + 0.03))
     }
 
     func testStabilityPassesUseRequestedOffsets() throws {

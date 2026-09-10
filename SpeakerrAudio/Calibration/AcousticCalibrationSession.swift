@@ -157,7 +157,8 @@ public final class AcousticCalibrationSession: @unchecked Sendable {
             guard abs(input.sampleRate - sampleRate) < 0.01 else {
                 throw CalibrationSessionError.requiresMatchingSampleRates(output: sampleRate, input: input.sampleRate)
             }
-            let generated = try GolayComplementaryPairGenerator(sequenceDurationSeconds: configuration.chirpDurationSeconds, level: configuration.level).generate(sampleRate: sampleRate)
+            let generated = try GolayComplementaryPairGenerator(level: configuration.level).generate(sampleRate: sampleRate)
+            try configuration.validateSchedule(signalDurationSeconds: generated.durationSeconds)
             let plannedEvents = makeEvents(sampleRate: sampleRate)
             let state = try CalibrationOutputRenderState(
                 sampleRate: sampleRate,

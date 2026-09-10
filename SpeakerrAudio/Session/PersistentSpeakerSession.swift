@@ -361,6 +361,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         configuration.selectedSpeakerCount = outputs.count
         try configuration.validate()
         guard running, let reference, let renderState else { throw AudioRoutingError.notConfigured }
+        try configuration.validateSchedule(signalDurationSeconds: reference.durationSeconds)
         guard abs(input.sampleRate - sampleRate) < 0.01 else { throw CalibrationSessionError.requiresMatchingSampleRates(output: sampleRate, input: input.sampleRate) }
         let priorState = stateMachine.state
         let priorDelays = delayComponents
@@ -368,7 +369,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         transport.discardAll()
         renderState.setMode(.calibration)
         _ = try stateMachine.handle(.beginCalibration)
-        let maximumDuration = max(30, Double(configuration.maximumPasses * configuration.eventsPerPass) * (configuration.chirpDurationSeconds + configuration.maximumAcousticLatencySeconds + 0.25) + 10)
+        let maximumDuration = max(30, Double(configuration.maximumPasses * configuration.eventsPerPass) * (reference.durationSeconds + configuration.maximumAcousticLatencySeconds + 0.25) + 10)
         let microphone = try ContinuousMicrophoneCapture(device: input, sampleRate: sampleRate, maximumDurationSeconds: maximumDuration)
         microphoneCapture = microphone
         try microphone.start()

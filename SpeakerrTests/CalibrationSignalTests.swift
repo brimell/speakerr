@@ -33,17 +33,13 @@ final class CalibrationSignalTests: XCTestCase {
         XCTAssertEqual(a.count, 8_192)
         XCTAssertEqual(b.count, 8_192)
         let center = a.count - 1
+        let aAutocorrelation = FFT.convolve(a.map(Double.init), a.map(Double.init).reversed())
+        let bAutocorrelation = FFT.convolve(b.map(Double.init), b.map(Double.init).reversed())
         for lag in 0..<a.count {
-            let aCorrelation = (0..<a.count).compactMap { index -> Float? in
-                let other = index + lag
-                return other < a.count ? a[index] * a[other] : nil
-            }.reduce(0, +)
-            let bCorrelation = (0..<b.count).compactMap { index -> Float? in
-                let other = index + lag
-                return other < b.count ? b[index] * b[other] : nil
-            }.reduce(0, +)
+            let aCorrelation = aAutocorrelation[center - lag]
+            let bCorrelation = bAutocorrelation[center - lag]
             if lag == 0 {
-                XCTAssertEqual(aCorrelation + bCorrelation, Float(a.count * 2))
+                XCTAssertEqual(aCorrelation + bCorrelation, Double(a.count * 2), accuracy: 0.001)
             } else {
                 XCTAssertEqual(aCorrelation + bCorrelation, 0, accuracy: 0.001, "lag=\(lag), center=\(center)")
             }
