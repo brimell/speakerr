@@ -624,6 +624,15 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             let candidates = values[index].map { "\($0.acousticLatencyMilliseconds):\($0.estimate.accepted ? "accepted" : "rejected")" }.joined(separator: ",")
             calibrationLogger.notice("Calibration selection speaker=\(self.outputs[index].name, privacy: .public) candidates=\(candidates, privacy: .public) dominantCluster=\(estimate.clusterMembers, privacy: .public) excluded=\(estimate.excludedOutliers, privacy: .public) chosen=\(estimate.delayMilliseconds ?? -1, privacy: .public) method=\(estimate.method, privacy: .public) quality=\(estimate.quality.rawValue, privacy: .public) range=\(estimate.summary?.spreadMilliseconds ?? -1, privacy: .public) MAD=\(estimate.summary?.medianAbsoluteDeviationMilliseconds ?? -1, privacy: .public)")
         }
+        #if DEBUG
+        do {
+            let directory = URL(fileURLWithPath: "/tmp/speakerr-calibration-diagnostics").appendingPathComponent(diagnosticRunID)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(result).write(to: directory.appendingPathComponent("pass\(pass + 1)_estimates.json"), options: .atomic)
+        } catch { calibrationLogger.error("Calibration pass artifact failed: \(error.localizedDescription, privacy: .public)") }
+        #endif
         return result
     }
 
@@ -794,6 +803,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                 "rejectionReason": estimate.rejectionReason?.rawValue as Any? ?? NSNull(),
                 "hardwareVolume": hardwareVolumeState(speaker: speaker),
                 "existingDelayMilliseconds": delayComponents[speaker].effectiveMilliseconds,
+                "compensationVector": delayComponents.map(\.calibration),
                 "scheduledInputSampleIndex": scheduledInput, "captureSliceStart": sliceStart,
                 "waveformStartSampleIndex": 0, "captureSliceEnd": sliceStart + recording.count,
                 "searchRangeStart": searchRange.lowerBound, "searchRangeEnd": searchRange.upperBound,

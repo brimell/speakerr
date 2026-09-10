@@ -11,6 +11,8 @@ private actor MockSpeakerSessionController: SpeakerSessionControlling {
     var startCount = 0
     var stopCount = 0
     var calibrationCancelled = false
+    var returnedPasses: [CalibrationPassMeasurements]?
+    func setCalibrationResponse(_ passes: [CalibrationPassMeasurements]) { returnedPasses = passes }
 
     init(snapshot: SessionControllerSnapshot) {
         currentSnapshot = snapshot
@@ -21,6 +23,7 @@ private actor MockSpeakerSessionController: SpeakerSessionControlling {
     func stop() { stopCount += 1 }
 
     func calibrate(inputUID: String, configuration: CalibrationExperimentConfiguration, progress: @escaping @Sendable (CalibrationProgressUpdate) -> Void) async throws -> [CalibrationPassMeasurements] {
+        if let returnedPasses { return returnedPasses }
         progress(.init(phase: .measuring(speakerIndex: 0, speakerName: "Bose", pass: 1, totalPasses: 3, measurement: 1, totalMeasurements: 3)))
         do {
             try await Task.sleep(for: .seconds(30))
@@ -128,6 +131,46 @@ final class SpeakerrViewModelTests: XCTestCase {
         XCTAssertEqual(startCount, 0)
         XCTAssertEqual(stopCount, 0)
         XCTAssertEqual(fixture.model.presentation.status, .aligned)
+    }
+
+    func testProvisionalUIRetainsInitialEstimateAndDoesNotDoubleCountResidualDelay() async throws {
+        let fixture = try makeFixture(state: .aligned, validCalibration: true)
+        func measurement(_ latency: Double, accepted: Bool) -> AcousticMeasurement {
+            AcousticMeasurement(emission: CalibrationEmission(pass: 0, sequence: 0, speakerIndex: 0, scheduledOutputFrame: 0, scheduledOutputHostTime: 1), arrivalHostTime: 2, acousticLatencyMilliseconds: latency, estimate: DelayEstimate(sampleOffset: latency, sampleRate: 1_000, confidence: accepted ? 0.7 : 0.32, peakValue: 0.22, secondBestPeak: 0.05, peakProminence: 4.4, accepted: accepted))
+        }
+        let initial = try CalibrationPassMeasurements(pass: 0, measurementsBySpeaker: [
+            [100.0, 100.1, 99.9].map { measurement($0, accepted: true) },
+            [42.0, 42.2, 42.4].map { measurement($0, accepted: false) }
+        ], failures: [])
+        let final = try CalibrationPassMeasurements(pass: 1, measurementsBySpeaker: [
+            [100.0, 100.1, 99.9].map { measurement($0, accepted: true) },
+            [99.8, 100.0, 100.2].map { measurement($0, accepted: false) }
+        ], failures: [])
+        await fixture.controller.setCalibrationResponse([initial, final])
+        await fixture.model.refresh()
+        fixture.model.calibrate()
+        for _ in 0..<100 where fixture.model.isBusy { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(fixture.model.calibrationOutcome, .estimated(residualMilliseconds: 0, applied: true, residualQuality: .provisional))
+        XCTAssertEqual(fixture.model.calibrationSpeakerResults[1].detectedLatencyMilliseconds, 42.2)
+        XCTAssertEqual(fixture.model.calibrationSpeakerResults[1].quality, .provisional)
+        XCTAssertEqual(fixture.model.calibrationCompletion?.residualSpreadMilliseconds, 0)
+        XCTAssertEqual(fixture.model.calibrationCompletion?.speakers[1].appliedDelayMilliseconds, 57.77)
+    }
+
+    func testPoorUIShowsCandidateWithoutClaimingAppliedAlignment() async throws {
+        let fixture = try makeFixture(state: .ready, validCalibration: false)
+        func measurement(_ latency: Double) -> AcousticMeasurement {
+            AcousticMeasurement(emission: CalibrationEmission(pass: 0, sequence: 0, speakerIndex: 0, scheduledOutputFrame: 0, scheduledOutputHostTime: 1), arrivalHostTime: 2, acousticLatencyMilliseconds: latency, estimate: DelayEstimate(sampleOffset: latency, sampleRate: 1_000, confidence: 0.2, peakValue: 0.1, secondBestPeak: 0.09, peakProminence: 1.1, accepted: false))
+        }
+        let pass = try CalibrationPassMeasurements(pass: 0, measurementsBySpeaker: [[measurement(100)], []], failures: ["no estimate"])
+        await fixture.controller.setCalibrationResponse([pass])
+        await fixture.model.refresh()
+        fixture.model.calibrate()
+        for _ in 0..<100 where fixture.model.isBusy { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(fixture.model.calibrationOutcome, .estimated(residualMilliseconds: nil, applied: false, residualQuality: .unavailable))
+        XCTAssertEqual(fixture.model.calibrationSpeakerResults[0].detectedLatencyMilliseconds, 100)
+        XCTAssertNil(fixture.model.calibrationSpeakerResults[1].detectedLatencyMilliseconds)
+        XCTAssertNil(fixture.model.calibrationCompletion)
     }
 
     private func makeFixture(state: SpeakerSessionState, validCalibration: Bool, availableBoth: Bool = true) throws -> (model: SpeakerrViewModel, controller: MockSpeakerSessionController) {
