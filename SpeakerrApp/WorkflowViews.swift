@@ -175,7 +175,12 @@ struct CalibrationSheet: View {
                     .keyboardShortcut(.cancelAction)
                 switch model.calibrationOutcome {
                 case .success:
-                    Button("Done") { dismiss() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                    Button("Calibrate Again") { model.calibrate() }
+                        .buttonStyle(.bordered)
+                        .disabled(model.preferences.preferredMicrophoneUID == nil)
+                    Button("Done") { dismiss() }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
                 case .nonConverged, .lowConfidence, .cancelled:
                     Button("Try Again") { model.calibrate() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
                 case .none:
