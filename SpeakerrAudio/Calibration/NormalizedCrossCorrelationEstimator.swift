@@ -54,6 +54,58 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
         self.exclusionMilliseconds = exclusionMilliseconds
     }
 
+    public func estimateDelay(
+        referenceA: [Float],
+        referenceB: [Float],
+        recording: [Float],
+        sampleRate: Double,
+        interSequenceSilenceSamples: Int,
+        searchRange: Range<Int>? = nil
+    ) throws -> DelayEstimate {
+        guard referenceA.count == referenceB.count, !referenceA.isEmpty else {
+            throw DelayEstimatorError.insufficientRecording
+        }
+        let combinedLength = referenceA.count * 2 + max(0, interSequenceSilenceSamples)
+        guard recording.count >= combinedLength else { throw DelayEstimatorError.insufficientRecording }
+        let maximumStart = recording.count - combinedLength + 1
+        let requested = searchRange ?? 0..<maximumStart
+        let lower = max(0, requested.lowerBound)
+        let upper = min(maximumStart, requested.upperBound)
+        guard lower < upper else { throw DelayEstimatorError.invalidSearchWindow }
+
+        let first = correlationSeries(reference: referenceA, recording: recording, lower: lower, upper: upper)
+        let secondLower = lower + referenceA.count + max(0, interSequenceSilenceSamples)
+        let secondUpper = upper + referenceA.count + max(0, interSequenceSilenceSamples)
+        let second = correlationSeries(reference: referenceB, recording: recording, lower: secondLower, upper: secondUpper)
+        var correlations = zip(first, second).map(+)
+        correlations = correlations.map { $0 * 0.5 }
+        guard let peakIndex = correlations.indices.max(by: { correlations[$0] < correlations[$1] }) else {
+            throw DelayEstimatorError.invalidSearchWindow
+        }
+        let peak = correlations[peakIndex]
+        let exclusion = max(1, Int((exclusionMilliseconds * sampleRate / 1_000).rounded()))
+        let secondBest = correlations.indices
+            .filter { abs($0 - peakIndex) > exclusion }
+            .map { correlations[$0] }
+            .max() ?? 0
+        let prominence = peak / max(secondBest, 1e-9)
+        let peakScore = min(1, max(0, (peak - minimumPeak) / max(1e-9, 1 - minimumPeak)))
+        let prominenceScore = min(1, max(0, (prominence - 1) / 0.5))
+        let confidence = 0.75 * peakScore + 0.25 * prominenceScore
+        var fractionalIndex = Double(peakIndex)
+        if peakIndex > 0, peakIndex + 1 < correlations.count {
+            let denominator = correlations[peakIndex - 1] - 2 * correlations[peakIndex] + correlations[peakIndex + 1]
+            if abs(denominator) > 1e-12 {
+                fractionalIndex += max(-0.5, min(0.5, 0.5 * (correlations[peakIndex - 1] - correlations[peakIndex + 1]) / denominator))
+            }
+        }
+        let estimate = DelayEstimate(sampleOffset: Double(lower) + fractionalIndex, sampleRate: sampleRate, confidence: confidence, peakValue: peak, secondBestPeak: secondBest, peakProminence: prominence)
+        guard peak >= minimumPeak, prominence >= minimumProminence, confidence >= minimumConfidence else {
+            throw DelayEstimatorError.lowConfidence(confidence: confidence, peak: peak, prominence: prominence)
+        }
+        return estimate
+    }
+
     public func estimateDelay(reference: [Float], recording: [Float], sampleRate: Double, searchRange: Range<Int>? = nil) throws -> DelayEstimate {
         guard sampleRate > 0 else { throw DelayEstimatorError.invalidSampleRate }
         guard !reference.isEmpty, recording.count >= reference.count else { throw DelayEstimatorError.insufficientRecording }
@@ -115,6 +167,7 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
             if abs(denominator) > 1e-12 {
                 fractionalIndex += max(-0.5, min(0.5, 0.5 * (left - right) / denominator))
             }
+
         }
         let estimate = DelayEstimate(
             sampleOffset: Double(lower) + fractionalIndex,
@@ -128,5 +181,28 @@ public struct NormalizedCrossCorrelationEstimator: DelayEstimator, Sendable {
             throw DelayEstimatorError.lowConfidence(confidence: confidence, peak: peak, prominence: prominence)
         }
         return estimate
+    }
+
+    private func correlationSeries(reference: [Float], recording: [Float], lower: Int, upper: Int) -> [Double] {
+        let ref = reference.map(Double.init)
+        let mean = ref.reduce(0, +) / Double(ref.count)
+        let centered = ref.map { $0 - mean }
+        let energy = centered.reduce(0) { $0 + $1 * $1 }
+        var result = [Double](repeating: 0, count: upper - lower)
+        for start in lower..<upper {
+            var sum = 0.0
+            var squares = 0.0
+            for index in 0..<ref.count {
+                let value = Double(recording[start + index])
+                sum += value
+                squares += value * value
+            }
+            let centeredEnergy = max(0, squares - sum * sum / Double(ref.count))
+            var numerator = 0.0
+            for index in 0..<ref.count { numerator += Double(recording[start + index]) * centered[index] }
+            let denominator = sqrt(energy * centeredEnergy)
+            result[start - lower] = denominator > 1e-12 ? abs(numerator / denominator) : 0
+        }
+        return result
     }
 }

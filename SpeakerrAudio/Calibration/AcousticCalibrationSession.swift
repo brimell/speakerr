@@ -157,7 +157,7 @@ public final class AcousticCalibrationSession: @unchecked Sendable {
             guard abs(input.sampleRate - sampleRate) < 0.01 else {
                 throw CalibrationSessionError.requiresMatchingSampleRates(output: sampleRate, input: input.sampleRate)
             }
-            let generated = try LogarithmicChirpGenerator(durationSeconds: configuration.chirpDurationSeconds, level: configuration.level).generate(sampleRate: sampleRate)
+            let generated = try GolayComplementaryPairGenerator(sequenceDurationSeconds: configuration.chirpDurationSeconds, level: configuration.level).generate(sampleRate: sampleRate)
             let plannedEvents = makeEvents(sampleRate: sampleRate)
             let state = try CalibrationOutputRenderState(
                 sampleRate: sampleRate,
@@ -243,7 +243,12 @@ public final class AcousticCalibrationSession: @unchecked Sendable {
         let recording = Array(captured.samples[sliceStart..<sliceEnd])
         let lower = max(0, Int(floor(scheduledInputIndex)) - sliceStart - preSearchFrames)
         let upper = min(recording.count - reference.samples.count + 1, searchEnd - sliceStart)
-        let estimate = try estimator.estimateDelay(reference: reference.samples, recording: recording, sampleRate: sampleRate, searchRange: lower..<upper)
+        let estimate: DelayEstimate
+        if let (a, b) = reference.complementarySequences {
+            estimate = try estimator.estimateDelay(referenceA: a, referenceB: b, recording: recording, sampleRate: sampleRate, interSequenceSilenceSamples: reference.interSequenceSilenceSamples, searchRange: lower..<upper)
+        } else {
+            estimate = try estimator.estimateDelay(reference: reference.samples, recording: recording, sampleRate: sampleRate, searchRange: lower..<upper)
+        }
         let globalArrivalIndex = Double(sliceStart) + estimate.sampleOffset
         let arrivalHost = try captured.hostTime(atSampleIndex: globalArrivalIndex)
         let latencyNanos = Int64(AudioConvertHostTimeToNanos(arrivalHost)) - Int64(AudioConvertHostTimeToNanos(scheduledHost))
