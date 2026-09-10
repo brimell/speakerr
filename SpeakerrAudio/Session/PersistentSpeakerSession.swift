@@ -482,6 +482,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
         var values = outputs.map { _ in [AcousticMeasurement]() }
         var failures: [String] = []
         let maximumAttempts = configuration.measurementsPerSpeaker + configuration.maximumRetriesPerSpeaker
+        var completedAttempts = 0
         for attempt in 0..<maximumAttempts {
             try Task.checkCancellation()
             for speaker in outputs.indices where values[speaker].count < configuration.measurementsPerSpeaker {
@@ -493,7 +494,9 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                 }
                 // Each pass has a bounded number of attempts per speaker, including retries.
                 // Report completed attempt work rather than only valid measurements.
-                let attemptFraction = (Double(attempt) + Double(speaker + 1) / Double(outputs.count)) / Double(maximumAttempts)
+                completedAttempts += 1
+                let totalAttempts = outputs.count * maximumAttempts
+                let attemptFraction = totalAttempts > 0 ? Double(completedAttempts) / Double(totalAttempts) : 1
                 let fraction = (Double(pass) + attemptFraction) / Double(configuration.maximumPasses)
                 progress?(.init(phase: .measuring(speakerIndex: speaker, speakerName: outputs[speaker].name, pass: pass + 1, totalPasses: configuration.maximumPasses, measurement: measurementNumber, totalMeasurements: configuration.measurementsPerSpeaker), progressFraction: fraction))
             }
