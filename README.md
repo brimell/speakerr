@@ -4,8 +4,6 @@ A free, open-source macOS system-wide 10-band parametric equalizer with native t
 
 speakerr sits in your menu bar and applies real-time EQ processing to all system audio, letting you fine-tune your listening experience across any app.
 
-Project website: [https://brimell.github.io/speakerr/](https://brimell.github.io/speakerr/)
-
 ## Screenshots
 
 Tray Menu:
