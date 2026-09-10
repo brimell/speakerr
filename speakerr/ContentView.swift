@@ -65,6 +65,20 @@ struct ContentView: View {
         }
     }
 
+    private func outputName(for index: Int) -> String {
+        if usesStereoChannelTerminology {
+            return index == 0 ? "Left Channel" : "Right Channel"
+        }
+        return "Speaker \(index + 1)"
+    }
+
+    private func outputLabel(for index: Int, name: String) -> String {
+        if usesStereoChannelTerminology {
+            return (index == 0 ? "L: " : "R: ") + name
+        }
+        return "\(index + 1): \(name)"
+    }
+
     private var selectedEQTargetBinding: Binding<String> {
         Binding(
             get: { selectedEQTargetUID },
@@ -78,6 +92,10 @@ struct ContentView: View {
 
     private var isCompactLayout: Bool {
         layout == .compact
+    }
+
+    private var usesStereoChannelTerminology: Bool {
+        SpeakerrStore.model.preferences.routingMode == .stereo
     }
 
     init(layout: ContentViewLayout = .full, advancedWindowID: String? = nil, onOpenAdvancedWindow: (() -> Void)? = nil) {
@@ -304,7 +322,7 @@ struct ContentView: View {
                                 .fill(selectedOutputDevices.count > 1 ? (idx == 0 ? Color.blue : Color.green) : Color.accentColor)
                                 .frame(width: 6, height: 6)
 
-                            Text(selectedOutputDevices.count > 1 ? (idx == 0 ? "L: " : "R: ") + dev.name : dev.name)
+                            Text(selectedOutputDevices.count > 1 ? outputLabel(for: idx, name: dev.name) : dev.name)
                                 .font(.caption.weight(.medium))
                                 .lineLimit(1)
 
@@ -347,7 +365,9 @@ struct ContentView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 } else if selectedOutputDevices.count == 2 {
-                    Text("Dual-speaker aligned pair active: Left (Ch 1) • Right (Ch 2)")
+                    Text(usesStereoChannelTerminology
+                         ? "Dual-speaker aligned pair active: Left (Ch 1) • Right (Ch 2)"
+                         : "Dual-speaker aligned pair active: Speaker 1 • Speaker 2")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
@@ -664,7 +684,7 @@ struct ContentView: View {
             return "Master EQ: Applied across all output speakers"
         } else if let index = selectedOutputDeviceUIDs.firstIndex(of: selectedEQTargetUID),
                   selectedOutputDevices.indices.contains(index) {
-            let channel = index == 0 ? "Left Channel" : "Right Channel"
+            let channel = outputName(for: index)
             return "Route EQ: Tuning \(channel) (\(selectedOutputDevices[index].name))"
         }
         return ""
@@ -682,10 +702,10 @@ struct ContentView: View {
                         Picker("", selection: selectedEQTargetBinding) {
                             Text("Master (All)").tag("master")
                             if selectedOutputDevices.indices.contains(0) {
-                                Text("Left: \(selectedOutputDevices[0].name)").tag(selectedOutputDevices[0].uid)
+                                Text("\(outputName(for: 0)): \(selectedOutputDevices[0].name)").tag(selectedOutputDevices[0].uid)
                             }
                             if selectedOutputDevices.indices.contains(1) {
-                                Text("Right: \(selectedOutputDevices[1].name)").tag(selectedOutputDevices[1].uid)
+                                Text("\(outputName(for: 1)): \(selectedOutputDevices[1].name)").tag(selectedOutputDevices[1].uid)
                             }
                         }
                         .pickerStyle(.segmented)
