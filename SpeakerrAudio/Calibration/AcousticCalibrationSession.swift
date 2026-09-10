@@ -209,17 +209,14 @@ public final class AcousticCalibrationSession: @unchecked Sendable {
         var bySpeaker = outputs.map { _ in [AcousticMeasurement]() }
         var failures: [String] = []
         for event in passEvents {
-            guard bySpeaker[event.speakerIndex].count < configuration.measurementsPerSpeaker else { continue }
+            guard bySpeaker[event.speakerIndex].filter({ $0.estimate.accepted }).count < configuration.measurementsPerSpeaker else { continue }
             do {
                 bySpeaker[event.speakerIndex].append(try measure(event: event, captured: captured, reference: reference))
             } catch {
                 failures.append("pass=\(pass + 1) sequence=\(event.sequence + 1) speaker=\(outputs[event.speakerIndex].name): \(error.localizedDescription)")
             }
         }
-        for index in outputs.indices where bySpeaker[index].count < configuration.measurementsPerSpeaker {
-            throw CalibrationSessionError.insufficientValidMeasurements(speaker: outputs[index].name, valid: bySpeaker[index].count, required: configuration.measurementsPerSpeaker)
-        }
-        return try CalibrationPassMeasurements(pass: pass, measurementsBySpeaker: bySpeaker, failures: failures)
+        return try CalibrationPassMeasurements(pass: pass, measurementsBySpeaker: bySpeaker, failures: failures, requiredAcceptedCount: configuration.measurementsPerSpeaker)
     }
 
     public func capturedAudio() throws -> CapturedAudio {

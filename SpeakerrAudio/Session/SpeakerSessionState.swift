@@ -102,8 +102,12 @@ public struct CalibrationSnapshot: Codable, Sendable, Equatable {
     public let confidence: Double
     public let calibratedAt: Date
     public let sessionGeneration: UInt64
+    private let storedQuality: CalibrationQuality?
+    private let storedResidualQuality: CalibrationQuality?
+    public var quality: CalibrationQuality { storedQuality ?? .high }
+    public var residualQuality: CalibrationQuality { storedResidualQuality ?? .high }
 
-    public init(outputUIDs: [String], sampleRate: Double, compensationByUID: [String: Double], residualMilliseconds: Double, confidence: Double, calibratedAt: Date = Date(), sessionGeneration: UInt64) {
+    public init(outputUIDs: [String], sampleRate: Double, compensationByUID: [String: Double], residualMilliseconds: Double, confidence: Double, calibratedAt: Date = Date(), sessionGeneration: UInt64, quality: CalibrationQuality = .high, residualQuality: CalibrationQuality = .high) {
         self.outputUIDs = outputUIDs
         self.sampleRate = sampleRate
         self.compensationByUID = compensationByUID
@@ -111,6 +115,8 @@ public struct CalibrationSnapshot: Codable, Sendable, Equatable {
         self.confidence = confidence
         self.calibratedAt = calibratedAt
         self.sessionGeneration = sessionGeneration
+        storedQuality = quality
+        storedResidualQuality = residualQuality
     }
 
     public func isValid(outputUIDs currentUIDs: [String], sampleRate currentRate: Double, sessionGeneration currentGeneration: UInt64) -> Bool {
