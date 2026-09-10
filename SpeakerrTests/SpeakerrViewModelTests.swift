@@ -44,6 +44,17 @@ private actor MockSpeakerSessionController: SpeakerSessionControlling {
 
 @MainActor
 final class SpeakerrViewModelTests: XCTestCase {
+    func testCalibrationVolumeClampsSavedAndAssignedValuesToSignalRange() {
+        let defaults = UserDefaults(suiteName: "SpeakerrCalibrationVolumeTests-\(UUID().uuidString)")!
+        defaults.set(0.8, forKey: "calibrationVolume")
+
+        let preferences = SpeakerrPreferences(defaults: defaults)
+        XCTAssertEqual(preferences.calibrationVolume, 0.5)
+
+        preferences.calibrationVolume = 0.7
+        XCTAssertEqual(preferences.calibrationVolume, 0.5)
+    }
+
     func testViewModelMapsValidEngineCalibrationToAligned() async throws {
         let fixture = try makeFixture(state: .aligned, validCalibration: true)
         let model = fixture.model

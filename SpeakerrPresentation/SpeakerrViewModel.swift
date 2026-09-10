@@ -27,7 +27,13 @@ public final class SpeakerrPreferences {
     public var routingMode: SpeakerRoutingMode { didSet { defaults.set(routingMode.rawValue, forKey: Keys.routingMode) } }
     public var preferredMicrophoneUID: String? { didSet { defaults.set(preferredMicrophoneUID, forKey: Keys.microphone) } }
     public var programmeInputUID: String? { didSet { defaults.set(programmeInputUID, forKey: Keys.programmeInput) } }
-    public var calibrationVolume: Double { didSet { defaults.set(calibrationVolume, forKey: Keys.volume) } }
+    public var calibrationVolume: Double {
+        get { storedCalibrationVolume }
+        set {
+            storedCalibrationVolume = min(max(newValue, 0.03), 0.5)
+            defaults.set(storedCalibrationVolume, forKey: Keys.volume)
+        }
+    }
     public var measurementsPerSpeaker: Int { didSet { defaults.set(measurementsPerSpeaker, forKey: Keys.measurements) } }
     public var showDetailedTiming: Bool { didSet { defaults.set(showDetailedTiming, forKey: Keys.detailedTiming) } }
     public var saveDiagnosticRecordings: Bool { didSet { defaults.set(saveDiagnosticRecordings, forKey: Keys.saveRecordings) } }
@@ -35,6 +41,7 @@ public final class SpeakerrPreferences {
     public var suggestRecalibrationAfterReconnect: Bool { didSet { defaults.set(suggestRecalibrationAfterReconnect, forKey: Keys.suggestRecalibration) } }
 
     private let defaults: UserDefaults
+    private var storedCalibrationVolume: Double
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -43,7 +50,7 @@ public final class SpeakerrPreferences {
         routingMode = SpeakerRoutingMode(rawValue: defaults.string(forKey: Keys.routingMode) ?? "") ?? .stereo
         preferredMicrophoneUID = defaults.string(forKey: Keys.microphone)
         programmeInputUID = defaults.string(forKey: Keys.programmeInput)
-        calibrationVolume = defaults.object(forKey: Keys.volume) as? Double ?? 0.12
+        storedCalibrationVolume = min(max(defaults.object(forKey: Keys.volume) as? Double ?? 0.12, 0.03), 0.5)
         measurementsPerSpeaker = defaults.object(forKey: Keys.measurements) as? Int ?? 3
         showDetailedTiming = defaults.bool(forKey: Keys.detailedTiming)
         saveDiagnosticRecordings = defaults.bool(forKey: Keys.saveRecordings)
