@@ -271,7 +271,7 @@ func transportName(_ transport: TransportType) -> String {
 func calibrationPhaseText(_ update: CalibrationProgressUpdate) -> String {
     switch update.phase {
     case .measuring(_, let name, let pass, let totalPasses, let measurement, let totalMeasurements):
-        "Measuring \(name) — measurement \(measurement) of \(totalMeasurements), pass \(pass) of \(totalPasses)"
+        "Measuring \(name) — measurement \(measurement) of \(totalMeasurements), calibration pass \(pass) of \(totalPasses)"
     case .applyingCorrection: "Applying correction…"
     case .verifying: "Verifying alignment…"
     }
