@@ -22,6 +22,18 @@ final class CalibrationMathTests: XCTestCase {
         }
     }
 
+    func testCompensationAlignsEightSpeakersWithoutPairwiseAssumptions() throws {
+        let arrivals = [81.37, 137.84, 95.62, 111.20, 64.50, 128.25, 104.75, 149.00]
+        let result = try DelayCompensation.calculate(arrivalMilliseconds: arrivals)
+
+        XCTAssertEqual(result.delays.count, arrivals.count)
+        for (actual, expected) in zip(result.delays, arrivals.map { 149.00 - $0 }) {
+            XCTAssertEqual(actual, expected, accuracy: 0.0001)
+        }
+        XCTAssertEqual(result.delays.max()!, 84.50, accuracy: 0.0001)
+        XCTAssertEqual(result.delays[7], 0, accuracy: 0.0001)
+    }
+
     func testConvergenceSuccessAndLimit() {
         let controller = ConvergenceController()
         XCTAssertTrue(controller.shouldContinue(residuals: [8]))

@@ -58,7 +58,7 @@ public struct GolayComplementaryPairGenerator: CalibrationSignalGenerator, Senda
               fadeSeconds >= 0, fadeSeconds * 2 <= sequenceDurationSeconds else {
             throw CalibrationSignalError.invalidDuration
         }
-        guard level > 0, level <= 0.5 else { throw CalibrationSignalError.invalidLevel }
+        guard level > 0, level <= 1.0 else { throw CalibrationSignalError.invalidLevel }
 
         // An order-13 pair is 8192 chips: 170.7 ms at 48 kHz without a
         // zero-order hold that would introduce a 6 kHz spectral null.
@@ -170,7 +170,7 @@ public struct LogarithmicChirpGenerator: CalibrationSignalGenerator, Sendable {
         guard durationSeconds > 0, fadeSeconds >= 0, fadeSeconds * 2 <= durationSeconds else {
             throw CalibrationSignalError.invalidDuration
         }
-        guard level > 0, level <= 0.5 else { throw CalibrationSignalError.invalidLevel }
+        guard level > 0, level <= 1.0 else { throw CalibrationSignalError.invalidLevel }
 
         let sampleCount = Int((durationSeconds * sampleRate).rounded())
         let fadeCount = min(Int((fadeSeconds * sampleRate).rounded()), sampleCount / 2)

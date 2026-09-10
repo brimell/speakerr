@@ -64,23 +64,46 @@ final class DelayEstimatorTests: XCTestCase {
             guard case .lowConfidence = $0 as? DelayEstimatorError else { return XCTFail("Expected low confidence, got \($0)") }
         }
 
-        func testGolayPairUsesSignedCombinedResponseWithFractionalDelay() throws {
-            let rate = 48_000.0
-            let signal = try GolayComplementaryPairGenerator().generate(sampleRate: rate)
-            let pair = signal.complementarySequences!
-            let delay = 1234.25
-            var recording = [Float](repeating: 0, count: Int(delay) + signal.samples.count + 2_000)
-            addFractional(signal.samples, to: &recording, at: delay, gain: 0.35)
-            let estimate = try estimator.estimateDelay(
-                referenceA: pair.0,
-                referenceB: pair.1,
-                recording: recording,
-                sampleRate: rate,
-                interSequenceSilenceSamples: signal.interSequenceSilenceSamples
-            )
-            XCTAssertEqual(estimate.sampleOffset, delay, accuracy: 0.08)
-            XCTAssertGreaterThan(estimate.confidence, 0.8)
-        }
+    }
+
+    func testGolayPairUsesSignedCombinedResponseWithFractionalDelay() throws {
+        let rate = 48_000.0
+        let signal = try GolayComplementaryPairGenerator().generate(sampleRate: rate)
+        let pair = signal.complementarySequences!
+        let delay = 1234.25
+        var recording = [Float](repeating: 0, count: Int(delay) + signal.samples.count + 2_000)
+        addFractional(signal.samples, to: &recording, at: delay, gain: 0.35)
+        let estimate = try estimator.estimateDelay(
+            referenceA: pair.0,
+            referenceB: pair.1,
+            recording: recording,
+            sampleRate: rate,
+            interSequenceSilenceSamples: signal.interSequenceSilenceSamples
+        )
+        XCTAssertEqual(estimate.sampleOffset, delay, accuracy: 0.08)
+        XCTAssertGreaterThan(estimate.confidence, 0.8)
+    }
+
+    func testGolayPairHandlesNoiseAndMultipath() throws {
+        let rate = 48_000.0
+        let signal = try GolayComplementaryPairGenerator().generate(sampleRate: rate)
+        let pair = signal.complementarySequences!
+        let delay = 876.4
+        var recording = [Float](repeating: 0, count: Int(ceil(delay)) + signal.samples.count + 4_000)
+        addFractional(signal.samples, to: &recording, at: delay, gain: 0.2)
+        addFractional(signal.samples, to: &recording, at: delay + 31.7 * rate / 1_000, gain: 0.2 * decibelsToGain(-9))
+        addFractional(signal.samples, to: &recording, at: delay + 68.2 * rate / 1_000, gain: 0.2 * decibelsToGain(-14))
+        addNoise(to: &recording, amplitude: 0.001)
+
+        let estimate = try estimator.estimateDelay(
+            referenceA: pair.0,
+            referenceB: pair.1,
+            recording: recording,
+            sampleRate: rate,
+            interSequenceSilenceSamples: signal.interSequenceSilenceSamples
+        )
+        XCTAssertEqual(estimate.sampleOffset, delay, accuracy: 0.15)
+        XCTAssertGreaterThan(estimate.confidence, 0.65)
     }
 
     func testSearchWindowRestrictsCandidate() throws {
@@ -133,4 +156,13 @@ final class DelayEstimatorTests: XCTestCase {
     }
 
     private func decibelsToGain(_ decibels: Double) -> Float { Float(pow(10, decibels / 20)) }
+
+    private func addNoise(to recording: inout [Float], amplitude: Float) {
+        var state: UInt64 = 0xD1CE_BA5E_1234_5678
+        for index in recording.indices {
+            state = state &* 6364136223846793005 &+ 1
+            let unit = Float((state >> 40) & 0xFFFFFF) / Float(0xFFFFFF)
+            recording[index] += (unit * 2 - 1) * amplitude
+        }
+    }
 }

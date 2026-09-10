@@ -27,7 +27,7 @@ struct SettingsView: View {
                 }
                 HStack {
                     Text("Calibration volume")
-                    Slider(value: Binding(get: { model.preferences.calibrationVolume }, set: { model.preferences.calibrationVolume = $0 }), in: 0.03...0.5)
+                    Slider(value: Binding(get: { model.preferences.calibrationVolume }, set: { model.preferences.calibrationVolume = $0 }), in: 0.03...1.0)
                 }
                 Picker("Measurements per speaker", selection: Binding(get: { model.preferences.measurementsPerSpeaker }, set: { model.preferences.measurementsPerSpeaker = $0 })) {
                     ForEach(1...5, id: \.self) { Text("\($0)").tag($0) }

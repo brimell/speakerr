@@ -115,7 +115,7 @@ struct CalibrationSheet: View {
             }
             HStack {
                 Text("Calibration volume")
-                Slider(value: Binding(get: { model.preferences.calibrationVolume }, set: { model.preferences.calibrationVolume = $0 }), in: 0.03...0.5)
+                Slider(value: Binding(get: { model.preferences.calibrationVolume }, set: { model.preferences.calibrationVolume = $0 }), in: 0.03...1.0)
                 Text(model.preferences.calibrationVolume, format: .percent.precision(.fractionLength(0)))
                     .monospacedDigit().frame(width: 42, alignment: .trailing)
             }
