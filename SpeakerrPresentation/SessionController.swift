@@ -27,6 +27,7 @@ public protocol SpeakerSessionControlling: Sendable {
     func calibrate(inputUID: String, configuration: CalibrationExperimentConfiguration, progress: @escaping @Sendable (CalibrationProgressUpdate) -> Void) async throws -> [CalibrationPassMeasurements]
     #if DEBUG
     func runMiddletonDiagnostic(inputUID: String, progress: @escaping @Sendable (Int) -> Void) async throws -> String
+    func runThreeSpeakerDiagnostic(inputUID: String, passesPerSpeaker: Int, progress: @escaping @Sendable (_ completedEmissions: Int, _ totalEmissions: Int, _ currentSpeaker: String) -> Void) async throws -> String
     #endif
     func recheck(inputUID: String, configuration: CalibrationExperimentConfiguration) async throws -> CalibrationPassMeasurements
     func applyDynamicCorrection(residualMilliseconds: Double) async throws
@@ -141,6 +142,15 @@ public actor CoreAudioSpeakerSessionController: SpeakerSessionControlling {
         guard let session else { throw SessionControllerError.sessionNotRunning }
         return try await session.runMiddletonDiagnostic(input: resolveInput(uid: inputUID), progress: progress)
     }
+
+    public func runThreeSpeakerDiagnostic(
+        inputUID: String,
+        passesPerSpeaker: Int = 20,
+        progress: @escaping @Sendable (_ completedEmissions: Int, _ totalEmissions: Int, _ currentSpeaker: String) -> Void
+    ) async throws -> String {
+        guard let session else { throw SessionControllerError.sessionNotRunning }
+        return try await session.runThreeSpeakerDiagnostic(input: resolveInput(uid: inputUID), passesPerSpeaker: passesPerSpeaker, progress: progress)
+    }
     #endif
 
     public func recheck(inputUID: String, configuration: CalibrationExperimentConfiguration) async throws -> CalibrationPassMeasurements {
@@ -249,6 +259,14 @@ private final class SystemOutputRoute: @unchecked Sendable {
 #if DEBUG
 public extension SpeakerSessionControlling {
     func runMiddletonDiagnostic(inputUID: String, progress: @escaping @Sendable (Int) -> Void) async throws -> String {
+        throw SessionControllerError.sessionNotRunning
+    }
+
+    func runThreeSpeakerDiagnostic(
+        inputUID: String,
+        passesPerSpeaker: Int = 20,
+        progress: @escaping @Sendable (_ completedEmissions: Int, _ totalEmissions: Int, _ currentSpeaker: String) -> Void
+    ) async throws -> String {
         throw SessionControllerError.sessionNotRunning
     }
 }

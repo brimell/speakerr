@@ -342,6 +342,32 @@ public final class SpeakerrViewModel {
             catch { diagnosticMessage = error.localizedDescription }
         }
     }
+
+    public func runThreeSpeakerDiagnostic(passesPerSpeaker: Int = 20) {
+        guard !isBusy, let inputUID = resolvedCalibrationInputUID else { return }
+        isBusy = true
+        diagnosticMessage = "Three-speaker diagnostic starting..."
+        calibrationTask = Task { [weak self] in
+            guard let self else { return }
+            defer { isBusy = false }
+            guard await microphonePermissionProvider.requestPermission() else {
+                microphonePermissionDenied = true
+                return
+            }
+            do {
+                let path = try await controller.runThreeSpeakerDiagnostic(inputUID: inputUID, passesPerSpeaker: passesPerSpeaker) { [weak self] completed, total, currentSpeaker in
+                    Task { @MainActor in
+                        self?.diagnosticMessage = "Three-speaker diagnostic: \(completed) / \(total) (\(currentSpeaker))"
+                    }
+                }
+                diagnosticMessage = "Multi-speaker diagnostic complete (\(passesPerSpeaker) passes/speaker). Delays retained. Artifacts: \(path)"
+            } catch is CancellationError {
+                diagnosticMessage = "Diagnostic cancelled. Delays retained."
+            } catch {
+                diagnosticMessage = error.localizedDescription
+            }
+        }
+    }
     #endif
 
     public func presentCalibration() {

@@ -42,4 +42,26 @@ final class CalibrationTimingTests: XCTestCase {
         XCTAssertEqual(configuration.passStartSeconds(configuration.maximumPasses + 1) - baseline, 30, accuracy: 0.0001)
         XCTAssertEqual(configuration.passStartSeconds(configuration.maximumPasses + 4) - baseline, 300, accuracy: 0.0001)
     }
+
+    func testInterleavedMultiSpeakerDiagnosticScheduleRotatesWithoutConsecutiveSpeakerEmissions() {
+        let speakerCount = 3
+        let passes = 20
+        var schedule: [Int] = []
+        var speakerCounts = [Int](repeating: 0, count: speakerCount)
+
+        for pass in 0..<passes {
+            let passOrder = (0..<speakerCount).map { ($0 + pass) % speakerCount }
+            for spk in passOrder {
+                schedule.append(spk)
+                speakerCounts[spk] += 1
+            }
+        }
+
+        XCTAssertEqual(schedule.count, 60)
+        XCTAssertEqual(speakerCounts, [20, 20, 20])
+        // Verify no speaker is emitted immediately after itself
+        for i in 1..<schedule.count {
+            XCTAssertNotEqual(schedule[i], schedule[i - 1], "Speaker \(schedule[i]) emitted consecutively at step \(i)")
+        }
+    }
 }

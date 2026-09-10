@@ -67,24 +67,43 @@ struct CalibrationSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            content
-            #if DEBUG
-            if let message = model.diagnosticMessage { Text(message).font(.caption).textSelection(.enabled) }
-            if !model.isBusy {
-                Text("For the diagnostic: keep MIDDLETON and the Mac stationary, use the same microphone and hardware volume, avoid volume keys, and keep the room quiet for all 20 measurements.").font(.caption).foregroundStyle(.secondary)
-                Button("Run MIDDLETON Diagnostic ×20") { model.runMiddletonDiagnostic() }
-                    .disabled(!model.presentation.speakers.contains { $0.name.localizedCaseInsensitiveContains("MIDDLETON") } || model.availableInputs.isEmpty)
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    content
+                    if !model.calibrationAttempts.isEmpty {
+                        DisclosureGroup("Measurement Details & Diagnostics") {
+                            VStack(alignment: .leading, spacing: 12) {
+                                diagnostics
+                                #if DEBUG
+                                Divider()
+                                debugDiagnostics
+                                #endif
+                            }
+                            .padding(.top, 4)
+                        }
+                        .font(.subheadline)
+                    } else {
+                        #if DEBUG
+                        DisclosureGroup("Developer Diagnostics") {
+                            debugDiagnostics
+                                .padding(.top, 4)
+                        }
+                        .font(.subheadline)
+                        #endif
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            #endif
-            if !model.calibrationAttempts.isEmpty {
-                diagnostics
-            }
-            Spacer(minLength: 4)
+
+            Divider()
+
             controls
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
         }
-        .padding(24)
-        .frame(minWidth: 520, idealWidth: 520, maxWidth: 520, minHeight: 330)
+        .frame(width: 560, height: 500)
     }
 
     @ViewBuilder
@@ -180,9 +199,9 @@ struct CalibrationSheet: View {
 
     private func qualityLabel(_ quality: CalibrationQuality) -> String {
         switch quality {
-        case .high: "High confidence"
-        case .provisional: "Provisional — low confidence"
-        case .poor: "Very low confidence"
+        case .high: "High quality"
+        case .medium: "Medium quality"
+        case .low: "Low quality"
         case .unavailable: "No usable estimate"
         }
     }
@@ -271,8 +290,33 @@ struct CalibrationSheet: View {
             }
             .frame(maxHeight: 150)
         }
-        .fixedSize(horizontal: false, vertical: true)
     }
+
+    #if DEBUG
+    @ViewBuilder
+    private var debugDiagnostics: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let message = model.diagnosticMessage {
+                Text(message).font(.caption).textSelection(.enabled)
+            }
+            if !model.isBusy {
+                Text("Interleaved probe diagnostic: keep all speakers and the Mac stationary, use the same microphone and hardware volume, avoid volume keys, and keep the room quiet.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Button("Run MIDDLETON Diagnostic ×20") {
+                        model.runMiddletonDiagnostic()
+                    }
+                    .disabled(!model.presentation.speakers.contains { $0.name.localizedCaseInsensitiveContains("MIDDLETON") } || model.availableInputs.isEmpty)
+                    Button("Run Three-Speaker Diagnostic (Interleaved ×20)") {
+                        model.runThreeSpeakerDiagnostic(passesPerSpeaker: 20)
+                    }
+                    .disabled(model.presentation.speakers.isEmpty || model.availableInputs.isEmpty)
+                }
+            }
+        }
+    }
+    #endif
 
     private func timing(_ value: Double, signed: Bool = false) -> some View {
         Text(signed ? String(format: "%+.2f ms", value) : String(format: "%.2f ms", value))
@@ -294,6 +338,11 @@ struct CalibrationSheet: View {
         }
     }
 
+    private func calibrationProgressView(_ update: CalibrationProgressUpdate?) -> some View {
+        ProgressView(value: update?.progress ?? 0, total: 1.0)
+            .progressViewStyle(.linear)
+    }
+
     @ViewBuilder
     private var controls: some View {
         HStack {
@@ -303,6 +352,8 @@ struct CalibrationSheet: View {
                 }
                 Spacer()
                 Button("Done") { dismiss() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
             } else if model.isBusy || model.presentation.status == .calibrating {
                 Spacer()
                 Button("Cancel") { model.cancelCalibration() }
