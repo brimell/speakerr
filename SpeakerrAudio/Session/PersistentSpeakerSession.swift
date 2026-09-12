@@ -380,11 +380,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             precondition(aggregate.driftCompensatedUIDs.count == max(0, outputs.count - 1), "Every non-master output must use drift compensation")
             #endif
             calibrationLogger.notice("Calibration session creation outputs.count=\(self.outputs.count, privacy: .public) outputNames=\(self.outputs.map(\.name), privacy: .public) outputUIDs=\(self.outputUIDs, privacy: .public) aggregateSubdeviceCount=\(aggregate.channelCounts.count, privacy: .public) aggregate.channelCounts=\(aggregate.channelCounts, privacy: .public) aggregate.driftCompensatedUIDs=\(aggregate.driftCompensatedUIDs, privacy: .public)")
-            #if DEBUG
-            let probeLevel = 0.12
-            #else
-            let probeLevel = calibrationLevel
-            #endif
+            let probeLevel = min(max(calibrationLevel, 0.05), 0.80)
             self.probeLevel = probeLevel
             let chirp = try GolayComplementaryPairGenerator(level: probeLevel).generate(sampleRate: sampleRate)
             let state = try PersistentRenderState(sampleRate: sampleRate, chirp: chirp.samples, transport: transport, channelCounts: aggregate.channelCounts, channelOffsets: aggregate.channelOffsets, delays: delayComponents.map(\.effectiveMilliseconds), routingMode: routingMode)
@@ -567,7 +563,7 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             )
             passes.append(pass0)
 
-            guard pass0.canApplyCompensation else {
+            guard pass0.canApplyCompensation && baselineMeasurements.allSatisfy({ $0.contains { $0.estimate.accepted } }) else {
                 for index in priorDelays.indices { try? setDelayComponents(index: index, value: priorDelays[index]) }
                 _ = try stateMachine.handle(.calibrationFailed("Pass 1 baseline rejected"))
                 calibrationLogger.notice("Calibration Pass 1 baseline rejected: restored priorDelays=\(priorDelays.map(\.calibration), privacy: .public)")
@@ -597,104 +593,78 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
             let maxBaselineDelay = compensation.delays.max() ?? 0
             progress?(.init(phase: .applyingCorrection(residualMilliseconds: maxBaselineDelay), progressFraction: 0.5, timeRemaining: singleMeasurementDuration * Double(outputs.count)))
 
-            // MARK: - Pass 2 (Adaptive Verification Pass)
-            var verificationMeasurements: [[AcousticMeasurement]] = outputs.map { _ in [] }
-            var verificationAttempts: [CalibrationAttemptDiagnostic] = []
-            var verificationFailures: [String] = []
+            // MARK: - Discrete Verification Generations
+            let maxGenerations = configuration.maximumVerificationGenerations
+            var verificationSucceeded = false
+            var finalSpread = Double.infinity
+            var finalPass: CalibrationPassMeasurements?
 
-            // Initial verification emission: 1 per speaker
-            for speaker in outputs.indices {
+            for genIndex in 1...maxGenerations {
                 try Task.checkCancellation()
-                let fraction = 0.5 + 0.5 * Double(speaker) / Double(outputs.count)
-                progress?(.init(phase: .verifying(pass: 2), progressFraction: fraction, timeRemaining: singleMeasurementDuration * Double(outputs.count - speaker)))
-                do {
-                    let m = try await emitAndMeasure(
-                        pass: 1,
-                        sequence: completedGlobalAttempts,
-                        speaker: speaker,
-                        configuration: configuration,
-                        microphone: microphone,
-                        reference: reference,
-                        diagnosticMode: false,
-                        timingCollector: timingCollector
-                    )
-                    verificationMeasurements[speaker].append(m)
-                    verificationAttempts.append(CalibrationAttemptDiagnostic(
-                        pass: 2,
-                        attempt: 1,
-                        speakerIndex: speaker,
-                        speakerName: outputs[speaker].name,
-                        measuredLatencyMilliseconds: m.acousticLatencyMilliseconds,
-                        peak: m.estimate.peakValue,
-                        secondBestPeak: m.estimate.secondBestPeak,
-                        prominence: m.estimate.peakProminence,
-                        confidence: m.estimate.confidence,
-                        accepted: m.estimate.accepted,
-                        failureReason: m.estimate.rejectionReason?.rawValue
-                    ))
-                } catch is CancellationError {
-                    throw CancellationError()
-                } catch {
-                    verificationFailures.append("verification speaker \(speaker) (\(outputs[speaker].name)): \(error.localizedDescription)")
-                    verificationAttempts.append(rejectedAttemptDiagnostic(pass: 2, attempt: 1, speaker: speaker, error: error))
-                }
-                completedGlobalAttempts += 1
-            }
+                let currentDelays = self.delayComponents.map(\.calibration)
+                var gen = VerificationGeneration(generationIndex: genIndex, activeDelaysMilliseconds: currentDelays)
+                var genAttempts: [CalibrationAttemptDiagnostic] = []
+                var genFailures: [String] = []
 
-            var verifiedSpread = AdaptiveCalibrationController.calculateVerificationSpread(verificationMeasurements: verificationMeasurements)
-            var allPassedQuality = verificationMeasurements.allSatisfy { list in
-                guard let last = list.last else { return false }
-                return AdaptiveCalibrationController.isFastAcceptable(last)
-            }
+                let genStartNanos = AudioConvertHostTimeToNanos(AudioGetCurrentHostTime())
+                let startNanos = AudioConvertHostTimeToNanos(startHostTime)
+                let genElapsed = Double(genStartNanos - startNanos) / 1_000_000_000.0
+                calibrationLogger.notice("Calibration verification generation \(genIndex, privacy: .public) starting with delayVector=\(currentDelays, privacy: .public) elapsed=\(genElapsed, privacy: .public)s")
 
-            // If not converged, perform targeted retries on offending speakers
-            if verifiedSpread == nil || verifiedSpread! > configuration.targetResidualMilliseconds || !allPassedQuality {
-                for retryAttempt in 0..<configuration.maximumRetriesPerSpeaker {
+                // Step A: Initial verification emission for all speakers under currentDelays
+                for speaker in outputs.indices {
                     try Task.checkCancellation()
-                    let offending = AdaptiveCalibrationController.identifyOffendingSpeakers(
-                        verificationMeasurements: verificationMeasurements,
-                        targetSpreadMilliseconds: configuration.targetResidualMilliseconds
-                    )
-                    guard !offending.isEmpty else { break }
+                    let fraction = 0.5 + 0.5 * Double((genIndex - 1) * outputs.count + speaker) / Double(maxGenerations * outputs.count)
+                    progress?(.init(phase: .verifying(pass: genIndex + 1), progressFraction: fraction, timeRemaining: singleMeasurementDuration * Double(outputs.count - speaker)))
 
-                    // Derived target arrival from accepted measurements only
-                    let targetArrival = AdaptiveCalibrationController.verificationTargetArrival(
-                        verificationMeasurements: verificationMeasurements,
-                        minimumAcceptedCount: min(2, outputs.count)
-                    ) ?? AdaptiveCalibrationController.verificationTargetArrival(
-                        verificationMeasurements: verificationMeasurements,
-                        minimumAcceptedCount: 1
-                    )
-
-                    for speaker in offending {
-                        try Task.checkCancellation()
-                        let lastMeasurement = verificationMeasurements[speaker].last
-                        let delayBefore = delayComponents[speaker].calibration
-                        let adjustment = AdaptiveCalibrationController.calculateVerificationRetryAdjustment(
-                            lastMeasurement: lastMeasurement,
-                            targetArrivalMilliseconds: targetArrival,
-                            currentCalibrationDelayMilliseconds: delayBefore,
-                            maximumSanityDeltaMilliseconds: AdaptiveCalibrationController.defaultSanityBoundDeltaMilliseconds
+                    do {
+                        let m = try await emitAndMeasure(
+                            pass: genIndex,
+                            sequence: completedGlobalAttempts,
+                            speaker: speaker,
+                            configuration: configuration,
+                            microphone: microphone,
+                            reference: reference,
+                            diagnosticMode: false,
+                            timingCollector: timingCollector
                         )
-                        var delayChanged = false
-                        if adjustment.shouldAdjustDelay {
-                            let saved = priorDelays[speaker]
-                            try setDelayComponents(
-                                index: speaker,
-                                value: DelayComponents(
-                                    manual: saved.manual,
-                                    calibration: adjustment.newCalibrationDelayMilliseconds,
-                                    dynamicCorrection: 0.0
-                                )
-                            )
-                            delayChanged = true
-                        }
-                        calibrationLogger.notice("Calibration verification retry prep speaker=\(self.outputs[speaker].name, privacy: .public) accepted=\(lastMeasurement?.estimate.accepted ?? false, privacy: .public) candidateLatency=\(lastMeasurement?.acousticLatencyMilliseconds ?? -1, privacy: .public) targetArrival=\(targetArrival ?? -1, privacy: .public) currentRouteDelay=\(delayBefore, privacy: .public) delayChanged=\(delayChanged, privacy: .public) appliedDelta=\(adjustment.deltaMilliseconds, privacy: .public) reason=\(adjustment.reason, privacy: .public)")
+                        let nowNanos = AudioConvertHostTimeToNanos(AudioGetCurrentHostTime())
+                        let elapsedSec = Double(nowNanos - startNanos) / 1_000_000_000.0
+                        gen.recordMeasurement(m, speakerIndex: speaker, elapsedSeconds: elapsedSec, activeDelayMilliseconds: currentDelays[speaker])
+                        genAttempts.append(CalibrationAttemptDiagnostic(
+                            pass: genIndex + 1,
+                            attempt: 1,
+                            speakerIndex: speaker,
+                            speakerName: outputs[speaker].name,
+                            measuredLatencyMilliseconds: m.acousticLatencyMilliseconds,
+                            peak: m.estimate.peakValue,
+                            secondBestPeak: m.estimate.secondBestPeak,
+                            prominence: m.estimate.peakProminence,
+                            confidence: m.estimate.confidence,
+                            accepted: m.estimate.accepted,
+                            failureReason: m.estimate.rejectionReason?.rawValue
+                        ))
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        genFailures.append("verification generation \(genIndex) speaker \(speaker) (\(outputs[speaker].name)): \(error.localizedDescription)")
+                        genAttempts.append(rejectedAttemptDiagnostic(pass: genIndex + 1, attempt: 1, speaker: speaker, error: error))
+                    }
+                    completedGlobalAttempts += 1
+                }
 
-                        // Remeasure only this speaker
+                // Step B: Retry rejected measurements WITHOUT CHANGING ANY DELAYS
+                for retryAttempt in 0..<configuration.maximumRetriesPerSpeaker {
+                    let unacceptedSpeakers = outputs.indices.filter { gen.observations[$0] == nil }
+                    guard !unacceptedSpeakers.isEmpty else { break }
+
+                    for speaker in unacceptedSpeakers {
+                        try Task.checkCancellation()
+                        calibrationLogger.notice("Calibration verification generation \(genIndex, privacy: .public) retrying rejected speaker=\(self.outputs[speaker].name, privacy: .public) attempt=\(retryAttempt + 2, privacy: .public) delayLocked=\(currentDelays[speaker], privacy: .public) ms")
+
                         do {
                             let m = try await emitAndMeasure(
-                                pass: 1,
+                                pass: genIndex,
                                 sequence: completedGlobalAttempts,
                                 speaker: speaker,
                                 configuration: configuration,
@@ -703,9 +673,11 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                                 diagnosticMode: false,
                                 timingCollector: timingCollector
                             )
-                            verificationMeasurements[speaker].append(m)
-                            verificationAttempts.append(CalibrationAttemptDiagnostic(
-                                pass: 2,
+                            let nowNanos = AudioConvertHostTimeToNanos(AudioGetCurrentHostTime())
+                            let elapsedSec = Double(nowNanos - startNanos) / 1_000_000_000.0
+                            gen.recordMeasurement(m, speakerIndex: speaker, elapsedSeconds: elapsedSec, activeDelayMilliseconds: currentDelays[speaker])
+                            genAttempts.append(CalibrationAttemptDiagnostic(
+                                pass: genIndex + 1,
                                 attempt: retryAttempt + 2,
                                 speakerIndex: speaker,
                                 speakerName: outputs[speaker].name,
@@ -720,51 +692,163 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                         } catch is CancellationError {
                             throw CancellationError()
                         } catch {
-                            verificationFailures.append("retry speaker \(speaker) (\(outputs[speaker].name)): \(error.localizedDescription)")
-                            verificationAttempts.append(rejectedAttemptDiagnostic(pass: 2, attempt: retryAttempt + 2, speaker: speaker, error: error))
+                            genFailures.append("retry gen \(genIndex) speaker \(speaker) (\(outputs[speaker].name)): \(error.localizedDescription)")
+                            genAttempts.append(rejectedAttemptDiagnostic(pass: genIndex + 1, attempt: retryAttempt + 2, speaker: speaker, error: error))
                         }
                         completedGlobalAttempts += 1
                     }
+                }
 
-                    verifiedSpread = AdaptiveCalibrationController.calculateVerificationSpread(verificationMeasurements: verificationMeasurements)
-                    allPassedQuality = verificationMeasurements.allSatisfy { list in
-                        guard let last = list.last else { return false }
-                        return AdaptiveCalibrationController.isFastAcceptable(last)
+                // Step C: Measurement-age skew check (refresh stale Bluetooth routes if skew > threshold)
+                let isBluetoothList = outputs.map { $0.transport == .bluetooth }
+                let staleSpeakers = AdaptiveCalibrationController.identifyStaleSpeakers(
+                    observations: gen.acceptedObservations ?? [],
+                    isBluetoothOrDrifting: isBluetoothList,
+                    maximumSkewSeconds: configuration.maximumMeasurementAgeSkewSeconds
+                )
+                if !staleSpeakers.isEmpty {
+                    calibrationLogger.notice("Calibration verification generation \(genIndex, privacy: .public) measurement age skew > \(configuration.maximumMeasurementAgeSkewSeconds, privacy: .public)s: refreshing stale Bluetooth speaker(s)=\(staleSpeakers.map { self.outputs[$0].name }, privacy: .public)")
+                    for speaker in staleSpeakers {
+                        try Task.checkCancellation()
+                        do {
+                            let m = try await emitAndMeasure(
+                                pass: genIndex,
+                                sequence: completedGlobalAttempts,
+                                speaker: speaker,
+                                configuration: configuration,
+                                microphone: microphone,
+                                reference: reference,
+                                diagnosticMode: false,
+                                timingCollector: timingCollector
+                            )
+                            let nowNanos = AudioConvertHostTimeToNanos(AudioGetCurrentHostTime())
+                            let elapsedSec = Double(nowNanos - startNanos) / 1_000_000_000.0
+                            gen.recordMeasurement(m, speakerIndex: speaker, elapsedSeconds: elapsedSec, activeDelayMilliseconds: currentDelays[speaker])
+                        } catch is CancellationError {
+                            throw CancellationError()
+                        } catch {
+                            // If refresh emission fails, keep previous accepted measurement
+                        }
+                        completedGlobalAttempts += 1
                     }
-                    if let s = verifiedSpread, s <= configuration.targetResidualMilliseconds, allPassedQuality {
+                }
+
+                // Step D: Evaluate Generation - unconditionally print table
+                let evalNanos = AudioConvertHostTimeToNanos(AudioGetCurrentHostTime())
+                let currentElapsed = Double(evalNanos - startNanos) / 1_000_000_000.0
+                let tableStr = AdaptiveCalibrationController.formatGenerationTable(
+                    generation: gen,
+                    speakerNames: outputs.map(\.name),
+                    currentElapsedSeconds: currentElapsed
+                )
+                calibrationLogger.notice("Calibration verification generation \(genIndex, privacy: .public) table:\n\(tableStr, privacy: .public)")
+                print("\n[Verification Generation \(genIndex)]")
+                print(tableStr)
+
+                // Guard: all speakers must have accepted observations in this generation
+                guard gen.isComplete else {
+                    calibrationLogger.notice("Calibration verification generation \(genIndex, privacy: .public) failed: one or more speakers could not obtain an accepted measurement.")
+                    print("Generation \(genIndex) incomplete: one or more speakers could not obtain an accepted measurement.")
+                    let passGen = try CalibrationPassMeasurements(
+                        pass: genIndex,
+                        measurementsBySpeaker: gen.rawMeasurements,
+                        failures: genFailures,
+                        attempts: genAttempts,
+                        requiredAcceptedCount: 1
+                    )
+                    passes.append(passGen)
+                    finalPass = passGen
+                    break
+                }
+
+                let spread = gen.spreadMilliseconds ?? .infinity
+                let passGen = try CalibrationPassMeasurements(
+                    pass: genIndex,
+                    measurementsBySpeaker: gen.rawMeasurements,
+                    failures: genFailures,
+                    attempts: genAttempts,
+                    requiredAcceptedCount: 1
+                )
+                passes.append(passGen)
+                finalPass = passGen
+                finalSpread = spread
+
+                // Log movement vs baseline (stable reference comparison)
+                for speaker in outputs.indices {
+                    if let baseSummary = pass0.summariesBySpeaker[speaker],
+                       let genObs = gen.observations[speaker] {
+                        let baseRaw = baseSummary.medianMilliseconds
+                        let genRaw = genObs.arrivalMilliseconds - genObs.activeDelayMilliseconds
+                        let deltaRoute = genRaw - baseRaw
+                        if abs(deltaRoute) > 0.5 {
+                            calibrationLogger.notice("Calibration speaker \(self.outputs[speaker].name, privacy: .public) end-to-end route latency changed \(String(format: "%+.3f", deltaRoute), privacy: .public) ms between baseline and verification generation \(genIndex, privacy: .public)")
+                        }
+                    }
+                }
+
+                if spread <= configuration.targetResidualMilliseconds && passGen.canApplyCompensation {
+                    calibrationLogger.notice("Calibration verification generation \(genIndex, privacy: .public) CONVERGED: spread=\(spread, privacy: .public) ms <= target=\(configuration.targetResidualMilliseconds, privacy: .public) ms")
+                    print("Spread: \(String(format: "%.3f", spread)) ms <= \(configuration.targetResidualMilliseconds) ms")
+                    print(">>> Verification generation \(genIndex) CONVERGED: spread=\(String(format: "%.3f", spread)) ms")
+                    verificationSucceeded = true
+                    break
+                }
+
+                // Step E: Correction generation (if generations remain)
+                if genIndex < maxGenerations {
+                    guard let corrections = AdaptiveCalibrationController.calculateGenerationCorrections(
+                        generation: gen,
+                        currentElapsedSeconds: currentElapsed,
+                        maximumSanityDeltaMilliseconds: AdaptiveCalibrationController.defaultSanityBoundDeltaMilliseconds
+                    ) else {
+                        calibrationLogger.notice("Calibration verification generation \(genIndex, privacy: .public) could not calculate correction vector")
+                        break
+                    }
+
+                    calibrationLogger.notice("Calibration verification generation \(genIndex, privacy: .public) spread before correction=\(spread, privacy: .public) ms targetArrival=\(corrections.targetArrivalMilliseconds, privacy: .public) ms")
+                    print("Spread before correction: \(String(format: "%.3f", spread)) ms")
+                    print("Correction vector (target arrival \(String(format: "%.3f", corrections.targetArrivalMilliseconds)) ms):")
+                    for sc in corrections.corrections {
+                        calibrationLogger.notice("Calibration generation \(genIndex, privacy: .public) route correction: speaker=\(self.outputs[sc.speakerIndex].name, privacy: .public) obsAge=\(String(format: "%.2f", sc.observationAgeSeconds), privacy: .public)s delta=\(String(format: "%+.3f", sc.deltaMilliseconds), privacy: .public) ms newDelay=\(String(format: "%.3f", sc.newDelayMilliseconds), privacy: .public) ms applied=\(sc.applied, privacy: .public) reason=\(sc.reason, privacy: .public)")
+                        print("  \(self.outputs[sc.speakerIndex].name): delta=\(String(format: "%+.3f", sc.deltaMilliseconds)) ms -> newDelay=\(String(format: "%.3f", sc.newDelayMilliseconds)) ms (age: \(String(format: "%.2f", sc.observationAgeSeconds))s, applied: \(sc.applied))")
+                    }
+
+                    if corrections.hasChanges {
+                        // Apply all bounded delay changes TOGETHER
+                        for sc in corrections.corrections {
+                            let saved = priorDelays[sc.speakerIndex]
+                            try setDelayComponents(
+                                index: sc.speakerIndex,
+                                value: DelayComponents(
+                                    manual: saved.manual,
+                                    calibration: sc.newDelayMilliseconds,
+                                    dynamicCorrection: 0.0
+                                )
+                            )
+                        }
+                        calibrationLogger.notice("Calibration verification generation \(genIndex, privacy: .public) applied all route delay corrections together: newDelays=\(corrections.newDelayVectorMilliseconds, privacy: .public)")
+                        print("Applied delay corrections together: \(corrections.newDelayVectorMilliseconds)")
+                        // Generation genIndex + 1 will now remeasure ALL outputs under this new delay vector
+                    } else {
+                        calibrationLogger.notice("Calibration verification generation \(genIndex, privacy: .public) corrections had no applicable changes")
                         break
                     }
                 }
             }
 
-            let pass1 = try CalibrationPassMeasurements(
-                pass: 1,
-                measurementsBySpeaker: verificationMeasurements,
-                failures: verificationFailures,
-                attempts: verificationAttempts,
-                requiredAcceptedCount: 1
-            )
-            passes.append(pass1)
-
-            let allLatestAccepted = verificationMeasurements.allSatisfy { list in
-                guard let last = list.last else { return false }
-                return last.estimate.accepted
-            }
-
-            guard allLatestAccepted,
-                  let finalSpread = verifiedSpread,
-                  finalSpread.isFinite,
+            guard verificationSucceeded,
                   finalSpread <= configuration.targetResidualMilliseconds,
-                  pass1.canApplyCompensation else {
+                  let lastPass = finalPass,
+                  lastPass.canApplyCompensation else {
                 // Restore prior delays on failure to converge
                 for index in priorDelays.indices { try? setDelayComponents(index: index, value: priorDelays[index]) }
-                let residual = verifiedSpread ?? .infinity
+                let residual = finalSpread.isFinite ? finalSpread : .infinity
                 _ = try stateMachine.handle(.calibrationFailed("residual \(residual) ms"))
                 calibrationLogger.notice("Calibration non-converged or unaccepted: restored priorDelays=\(priorDelays.map(\.calibration), privacy: .public) residual=\(residual, privacy: .public)")
                 throw CalibrationSessionError.didNotConverge(residualMilliseconds: residual)
             }
 
-            let allMeasurements = pass1.measurementsBySpeaker.flatMap { $0 }
+            let allMeasurements = passes.flatMap { $0.measurementsBySpeaker.flatMap { $0 } }
             let confidence = allMeasurements.map(\.estimate.confidence).reduce(0, +) / Double(max(1, allMeasurements.count))
             guard outputUIDs.count == delayComponents.count else { throw CalibrationSessionError.invalidConfiguration }
             let compensationByUID = Dictionary(uniqueKeysWithValues: outputUIDs.indices.map { (outputUIDs[$0], delayComponents[$0].calibration) })
@@ -775,8 +859,8 @@ public final class PersistentSpeakerSession: @unchecked Sendable {
                 residualMilliseconds: finalSpread,
                 confidence: confidence,
                 sessionGeneration: generation,
-                quality: pass1.quality,
-                residualQuality: pass1.quality
+                quality: lastPass.quality,
+                residualQuality: lastPass.quality
             )
             _ = try stateMachine.handle(.calibrationSucceeded)
             progress?(.init(phase: .completed, progressFraction: 1, timeRemaining: 0))

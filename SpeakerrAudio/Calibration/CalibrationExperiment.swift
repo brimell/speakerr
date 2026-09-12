@@ -10,6 +10,8 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
     public var measurementsPerSpeaker: Int
     public var maximumPasses: Int
     public var maximumRetriesPerSpeaker: Int
+    public var maximumVerificationGenerations: Int
+    public var maximumMeasurementAgeSkewSeconds: Double
     public var maximumAcousticLatencySeconds: Double
     public var targetResidualMilliseconds: Double
     public var level: Double
@@ -24,6 +26,8 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
         measurementsPerSpeaker: Int = 3,
         maximumPasses: Int = 3,
         maximumRetriesPerSpeaker: Int = 2,
+        maximumVerificationGenerations: Int = 3,
+        maximumMeasurementAgeSkewSeconds: Double = 5.0,
         maximumAcousticLatencySeconds: Double = 0.4,
         targetResidualMilliseconds: Double = 2,
         level: Double = 0.12,
@@ -37,6 +41,8 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
         self.measurementsPerSpeaker = measurementsPerSpeaker
         self.maximumPasses = maximumPasses
         self.maximumRetriesPerSpeaker = maximumRetriesPerSpeaker
+        self.maximumVerificationGenerations = maximumVerificationGenerations
+        self.maximumMeasurementAgeSkewSeconds = maximumMeasurementAgeSkewSeconds
         self.maximumAcousticLatencySeconds = maximumAcousticLatencySeconds
         self.targetResidualMilliseconds = targetResidualMilliseconds
         self.level = level
@@ -54,6 +60,8 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
               selectedSpeakerCount > 0,
               maximumPasses > 0,
               maximumRetriesPerSpeaker >= 0,
+              maximumVerificationGenerations > 0,
+              maximumMeasurementAgeSkewSeconds > 0,
               maximumAcousticLatencySeconds > 0,
               stabilityMeasurementOffsetsSeconds.allSatisfy({ $0 >= 0 }),
               stabilityMeasurementOffsetsSeconds == stabilityMeasurementOffsetsSeconds.sorted() else {
@@ -74,7 +82,7 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
 
     private enum CodingKeys: String, CodingKey {
         case preRollSeconds, chirpDurationSeconds, intervalSeconds, passGapSeconds, postRollSeconds
-        case measurementsPerSpeaker, maximumPasses, maximumRetriesPerSpeaker, maximumAcousticLatencySeconds
+        case measurementsPerSpeaker, maximumPasses, maximumRetriesPerSpeaker, maximumVerificationGenerations, maximumMeasurementAgeSkewSeconds, maximumAcousticLatencySeconds
         case targetResidualMilliseconds, level, stabilityMeasurementOffsetsSeconds, selectedSpeakerCount
     }
 
@@ -88,6 +96,8 @@ public struct CalibrationExperimentConfiguration: Sendable, Equatable, Codable {
         measurementsPerSpeaker = try values.decode(Int.self, forKey: .measurementsPerSpeaker)
         maximumPasses = try values.decode(Int.self, forKey: .maximumPasses)
         maximumRetriesPerSpeaker = try values.decode(Int.self, forKey: .maximumRetriesPerSpeaker)
+        maximumVerificationGenerations = try values.decodeIfPresent(Int.self, forKey: .maximumVerificationGenerations) ?? 3
+        maximumMeasurementAgeSkewSeconds = try values.decodeIfPresent(Double.self, forKey: .maximumMeasurementAgeSkewSeconds) ?? 5.0
         maximumAcousticLatencySeconds = try values.decode(Double.self, forKey: .maximumAcousticLatencySeconds)
         targetResidualMilliseconds = try values.decode(Double.self, forKey: .targetResidualMilliseconds)
         level = try values.decode(Double.self, forKey: .level)

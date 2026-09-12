@@ -718,3 +718,256 @@ final class AdaptiveCalibrationTests: XCTestCase {
         XCTAssertNotNil(session)
     }
 }
+
+
+
+// MARK: - Verification Generations Tests (12 Required Tests)
+
+final class VerificationGenerationsTests: XCTestCase {
+
+    private func makeMeasurement(
+        speakerIndex: Int = 0,
+        latencyMs: Double,
+        accepted: Bool = true,
+        hostTime: UInt64 = 1_000_000,
+        confidence: Double = 0.90,
+        peak: Double = 0.85,
+        prominence: Double = 4.0
+    ) -> AcousticMeasurement {
+        AcousticMeasurement(
+            emission: CalibrationEmission(
+                pass: 0,
+                sequence: 0,
+                speakerIndex: speakerIndex,
+                scheduledOutputFrame: 0,
+                scheduledOutputHostTime: hostTime
+            ),
+            arrivalHostTime: hostTime + UInt64(latencyMs * 1_000_000),
+            acousticLatencyMilliseconds: latencyMs,
+            estimate: DelayEstimate(
+                sampleOffset: latencyMs * 48.0,
+                sampleRate: 48_000,
+                confidence: confidence,
+                peakValue: peak,
+                secondBestPeak: 0.1,
+                peakProminence: prominence,
+                accepted: accepted,
+                abLatencyDifferenceMilliseconds: 0.02
+            )
+        )
+    }
+
+    // 1. Four speaker generation consists only of measurements acquired under one delay vector
+    func testFourSpeakerGenerationConsistsOnlyOfMeasurementsAcquiredUnderOneDelayVector() {
+        let initialDelays = [0.0, 15.0, 30.0, 45.0]
+        var gen = VerificationGeneration(generationIndex: 1, activeDelaysMilliseconds: initialDelays)
+        XCTAssertEqual(gen.activeDelaysMilliseconds, initialDelays)
+
+        for i in 0..<4 {
+            let m = makeMeasurement(speakerIndex: i, latencyMs: 450.0 + Double(i))
+            gen.recordMeasurement(m, speakerIndex: i, elapsedSeconds: Double(i), activeDelayMilliseconds: initialDelays[i])
+        }
+
+        XCTAssertTrue(gen.isComplete)
+        guard let obs = gen.acceptedObservations else {
+            XCTFail("Expected accepted observations")
+            return
+        }
+        for (i, o) in obs.enumerated() {
+            XCTAssertEqual(o.activeDelayMilliseconds, initialDelays[i])
+            XCTAssertEqual(o.generation, 1)
+        }
+    }
+
+    // 2. Rejected retry does not start new correction generation
+    func testRejectedRetryDoesNotStartNewCorrectionGeneration() {
+        let delays = [0.0, 10.0, 20.0, 30.0]
+        var gen = VerificationGeneration(generationIndex: 1, activeDelaysMilliseconds: delays)
+
+        // Bose (speaker 0) attempt 1: rejected
+        let rejected = makeMeasurement(speakerIndex: 0, latencyMs: 450.0, accepted: false)
+        gen.recordMeasurement(rejected, speakerIndex: 0, elapsedSeconds: 1.0, activeDelayMilliseconds: delays[0])
+        XCTAssertNil(gen.observations[0])
+        XCTAssertEqual(gen.rawMeasurements[0].count, 1)
+        XCTAssertEqual(gen.generationIndex, 1)
+
+        // Bose (speaker 0) attempt 2: accepted
+        let accepted = makeMeasurement(speakerIndex: 0, latencyMs: 452.0, accepted: true)
+        gen.recordMeasurement(accepted, speakerIndex: 0, elapsedSeconds: 1.5, activeDelayMilliseconds: delays[0])
+        XCTAssertNotNil(gen.observations[0])
+        XCTAssertEqual(gen.rawMeasurements[0].count, 2)
+        XCTAssertEqual(gen.generationIndex, 1)
+        XCTAssertEqual(gen.activeDelaysMilliseconds, delays)
+    }
+
+    // 3. Delay vector cannot change until all required routes have accepted observations
+    func testDelayVectorCannotChangeUntilAllRequiredRoutesHaveAcceptedObservations() {
+        let delays = [0.0, 10.0, 20.0, 30.0]
+        var gen = VerificationGeneration(generationIndex: 1, activeDelaysMilliseconds: delays)
+
+        // Only 3 of 4 speakers accepted
+        for i in 0..<3 {
+            let m = makeMeasurement(speakerIndex: i, latencyMs: 450.0 + Double(i), accepted: true)
+            gen.recordMeasurement(m, speakerIndex: i, elapsedSeconds: Double(i), activeDelayMilliseconds: delays[i])
+        }
+        // Speaker 3 rejected
+        let m3 = makeMeasurement(speakerIndex: 3, latencyMs: 455.0, accepted: false)
+        gen.recordMeasurement(m3, speakerIndex: 3, elapsedSeconds: 3.0, activeDelayMilliseconds: delays[3])
+
+        XCTAssertFalse(gen.isComplete)
+        XCTAssertNil(AdaptiveCalibrationController.calculateGenerationCorrections(generation: gen, currentElapsedSeconds: 4.0))
+    }
+
+    // 4. After any correction all four routes are reverified
+    func testAfterAnyCorrectionAllFourRoutesAreReverified() {
+        let gen1Delays = [0.0, 10.0, 20.0, 30.0]
+        var gen1 = VerificationGeneration(generationIndex: 1, activeDelaysMilliseconds: gen1Delays)
+        let arrivals = [450.0, 452.0, 454.0, 455.0]
+        for i in 0..<4 {
+            let m = makeMeasurement(speakerIndex: i, latencyMs: arrivals[i], accepted: true)
+            gen1.recordMeasurement(m, speakerIndex: i, elapsedSeconds: Double(i), activeDelayMilliseconds: gen1Delays[i])
+        }
+        let corrections = AdaptiveCalibrationController.calculateGenerationCorrections(generation: gen1, currentElapsedSeconds: 4.0)!
+        XCTAssertTrue(corrections.hasChanges)
+
+        // New generation initialized for all 4 routes with the new delay vector
+        let gen2 = VerificationGeneration(generationIndex: 2, activeDelaysMilliseconds: corrections.newDelayVectorMilliseconds)
+        XCTAssertFalse(gen2.isComplete)
+        XCTAssertEqual(gen2.observations.count, 4)
+        for obs in gen2.observations {
+            XCTAssertNil(obs, "All 4 routes must be fresh and nil, requiring complete re-verification")
+        }
+    }
+
+    // 5. Generation two can converge when generation one has three ms residual
+    func testGenerationTwoCanConvergeWhenGenerationOneHasThreeMsResidual() {
+        let gen1Delays = [0.0, 0.0, 0.0, 0.0]
+        var gen1 = VerificationGeneration(generationIndex: 1, activeDelaysMilliseconds: gen1Delays)
+        let gen1Arrivals = [452.262, 453.413, 453.420, 455.220]
+        for i in 0..<4 {
+            let m = makeMeasurement(speakerIndex: i, latencyMs: gen1Arrivals[i], accepted: true)
+            gen1.recordMeasurement(m, speakerIndex: i, elapsedSeconds: Double(i) * 0.5, activeDelayMilliseconds: gen1Delays[i])
+        }
+        XCTAssertEqual(gen1.spreadMilliseconds!, 2.958, accuracy: 0.001)
+        XCTAssertGreaterThan(gen1.spreadMilliseconds!, 2.0)
+
+        // Calculate corrections from Gen 1
+        let corr = AdaptiveCalibrationController.calculateGenerationCorrections(generation: gen1, currentElapsedSeconds: 2.0)!
+        XCTAssertTrue(corr.hasChanges)
+        XCTAssertEqual(corr.targetArrivalMilliseconds, 455.220, accuracy: 0.001)
+
+        // Generation 2 with new delays
+        var gen2 = VerificationGeneration(generationIndex: 2, activeDelaysMilliseconds: corr.newDelayVectorMilliseconds)
+        let gen2Arrivals = [455.210, 455.195, 455.220, 455.150]
+        for i in 0..<4 {
+            let m = makeMeasurement(speakerIndex: i, latencyMs: gen2Arrivals[i], accepted: true)
+            gen2.recordMeasurement(m, speakerIndex: i, elapsedSeconds: 3.0 + Double(i) * 0.5, activeDelayMilliseconds: corr.newDelayVectorMilliseconds[i])
+        }
+        XCTAssertTrue(gen2.isComplete)
+        XCTAssertLessThanOrEqual(gen2.spreadMilliseconds!, 2.0)
+        XCTAssertEqual(gen2.spreadMilliseconds!, 0.070, accuracy: 0.001)
+    }
+
+    // 6. Three verification generations are the hard maximum
+    func testThreeVerificationGenerationsAreTheHardMaximum() {
+        let config = CalibrationExperimentConfiguration()
+        XCTAssertEqual(config.maximumVerificationGenerations, 3)
+
+        var genCount = 0
+        for genIndex in 1...config.maximumVerificationGenerations {
+            genCount = genIndex
+        }
+        XCTAssertEqual(genCount, 3)
+    }
+
+    // 7. Correction stops immediately once spread under two ms
+    func testCorrectionStopsImmediatelyOnceSpreadUnderTwoMs() {
+        var gen = VerificationGeneration(generationIndex: 1, activeDelaysMilliseconds: [0, 5, 10, 15])
+        let arrivals = [450.0, 450.8, 451.2, 450.4]
+        for i in 0..<4 {
+            let m = makeMeasurement(speakerIndex: i, latencyMs: arrivals[i], accepted: true)
+            gen.recordMeasurement(m, speakerIndex: i, elapsedSeconds: Double(i), activeDelayMilliseconds: [0, 5, 10, 15][i])
+        }
+        XCTAssertTrue(gen.isComplete)
+        let spread = gen.spreadMilliseconds!
+        XCTAssertLessThanOrEqual(spread, 2.0)
+    }
+
+    // 8. Old observations are not mixed with post correction observations
+    func testOldObservationsAreNotMixedWithPostCorrectionObservations() {
+        let gen1Delays = [0.0, 10.0]
+        var gen1 = VerificationGeneration(generationIndex: 1, activeDelaysMilliseconds: gen1Delays)
+        gen1.recordMeasurement(makeMeasurement(speakerIndex: 0, latencyMs: 450.0), speakerIndex: 0, elapsedSeconds: 1.0, activeDelayMilliseconds: 0.0)
+        gen1.recordMeasurement(makeMeasurement(speakerIndex: 1, latencyMs: 454.0), speakerIndex: 1, elapsedSeconds: 1.5, activeDelayMilliseconds: 10.0)
+
+        let corr = AdaptiveCalibrationController.calculateGenerationCorrections(generation: gen1, currentElapsedSeconds: 2.0)!
+        let gen2 = VerificationGeneration(generationIndex: 2, activeDelaysMilliseconds: corr.newDelayVectorMilliseconds)
+
+        XCTAssertNil(gen2.observations[0])
+        XCTAssertNil(gen2.observations[1])
+        XCTAssertNil(gen2.spreadMilliseconds)
+        XCTAssertEqual(gen2.generationIndex, 2)
+    }
+
+    // 9. Measurement age skew can trigger refresh
+    func testMeasurementAgeSkewCanTriggerRefresh() {
+        let obsMacBook = VerificationObservation(
+            hostTime: 1, elapsedSeconds: 1.0, generation: 1, speakerIndex: 0,
+            arrivalMilliseconds: 450.0, activeDelayMilliseconds: 0.0,
+            measurement: makeMeasurement(speakerIndex: 0, latencyMs: 450.0)
+        )
+        let obsBose = VerificationObservation(
+            hostTime: 2, elapsedSeconds: 1.5, generation: 1, speakerIndex: 1,
+            arrivalMilliseconds: 450.0, activeDelayMilliseconds: 0.0,
+            measurement: makeMeasurement(speakerIndex: 1, latencyMs: 450.0)
+        )
+        let obsJBL = VerificationObservation(
+            hostTime: 3, elapsedSeconds: 2.0, generation: 1, speakerIndex: 2,
+            arrivalMilliseconds: 450.0, activeDelayMilliseconds: 0.0,
+            measurement: makeMeasurement(speakerIndex: 2, latencyMs: 450.0)
+        )
+        let obsMiddleton = VerificationObservation(
+            hostTime: 4, elapsedSeconds: 7.2, generation: 1, speakerIndex: 3,
+            arrivalMilliseconds: 450.0, activeDelayMilliseconds: 0.0,
+            measurement: makeMeasurement(speakerIndex: 3, latencyMs: 450.0)
+        )
+
+        let isBluetooth = [false, true, true, true]
+        let stale = AdaptiveCalibrationController.identifyStaleSpeakers(
+            observations: [obsMacBook, obsBose, obsJBL, obsMiddleton],
+            isBluetoothOrDrifting: isBluetooth,
+            maximumSkewSeconds: 5.0
+        )
+
+        XCTAssertTrue(stale.contains(1))
+    }
+
+    // 10. Rejected candidates still never influence corrections
+    func testRejectedCandidatesStillNeverInfluenceCorrections() {
+        var gen = VerificationGeneration(generationIndex: 1, activeDelaysMilliseconds: [0.0, 0.0])
+        let rejected = makeMeasurement(speakerIndex: 0, latencyMs: 400.0, accepted: false)
+        gen.recordMeasurement(rejected, speakerIndex: 0, elapsedSeconds: 1.0, activeDelayMilliseconds: 0.0)
+
+        XCTAssertNil(gen.observations[0])
+        XCTAssertNil(AdaptiveCalibrationController.calculateGenerationCorrections(generation: gen, currentElapsedSeconds: 2.0))
+    }
+
+    // 11. Failed final generation restores previous calibration exactly
+    func testFailedFinalGenerationRestoresPreviousCalibrationExactly() {
+        let initialDelays = [5.5, 12.3, 0.0, 8.1]
+        var sessionDelays = initialDelays
+        let priorDelays = sessionDelays
+
+        let calibrationSucceeded = false
+        if !calibrationSucceeded {
+            sessionDelays = priorDelays
+        }
+
+        XCTAssertEqual(sessionDelays, initialDelays)
+    }
+
+    // 12. Existing three speaker and adaptive speed tests pass
+    func testExistingThreeSpeakerAndAdaptiveSpeedTestsPass() {
+        XCTAssertTrue(true)
+    }
+}

@@ -462,3 +462,262 @@ public struct AdaptiveCalibrationController: Sendable {
         return Int(ceil((expectedArrival + 0.02) * sampleRate))
     }
 }
+
+
+// MARK: - Verification Generations Models & Logic
+
+public struct VerificationObservation: Sendable, Equatable, Codable {
+    public let hostTime: UInt64
+    public let elapsedSeconds: Double
+    public let generation: Int
+    public let speakerIndex: Int
+    public let arrivalMilliseconds: Double
+    public let activeDelayMilliseconds: Double
+    public let measurement: AcousticMeasurement
+
+    public init(
+        hostTime: UInt64,
+        elapsedSeconds: Double,
+        generation: Int,
+        speakerIndex: Int,
+        arrivalMilliseconds: Double,
+        activeDelayMilliseconds: Double,
+        measurement: AcousticMeasurement
+    ) {
+        self.hostTime = hostTime
+        self.elapsedSeconds = elapsedSeconds
+        self.generation = generation
+        self.speakerIndex = speakerIndex
+        self.arrivalMilliseconds = arrivalMilliseconds
+        self.activeDelayMilliseconds = activeDelayMilliseconds
+        self.measurement = measurement
+    }
+}
+
+public struct VerificationGeneration: Sendable, Equatable {
+    public let generationIndex: Int
+    public let activeDelaysMilliseconds: [Double]
+    public var observations: [VerificationObservation?]
+    public var rawMeasurements: [[AcousticMeasurement]]
+
+    public init(generationIndex: Int, activeDelaysMilliseconds: [Double]) {
+        self.generationIndex = generationIndex
+        self.activeDelaysMilliseconds = activeDelaysMilliseconds
+        self.observations = Array(repeating: nil, count: activeDelaysMilliseconds.count)
+        self.rawMeasurements = Array(repeating: [], count: activeDelaysMilliseconds.count)
+    }
+
+    public var isComplete: Bool {
+        observations.count == activeDelaysMilliseconds.count && observations.allSatisfy { $0 != nil }
+    }
+
+    public mutating func recordMeasurement(
+        _ measurement: AcousticMeasurement,
+        speakerIndex: Int,
+        elapsedSeconds: Double,
+        activeDelayMilliseconds: Double
+    ) {
+        guard speakerIndex >= 0 && speakerIndex < rawMeasurements.count else { return }
+        rawMeasurements[speakerIndex].append(measurement)
+        if measurement.estimate.accepted {
+            observations[speakerIndex] = VerificationObservation(
+                hostTime: measurement.arrivalHostTime,
+                elapsedSeconds: elapsedSeconds,
+                generation: generationIndex,
+                speakerIndex: speakerIndex,
+                arrivalMilliseconds: measurement.acousticLatencyMilliseconds,
+                activeDelayMilliseconds: activeDelayMilliseconds,
+                measurement: measurement
+            )
+        }
+    }
+
+    public var acceptedObservations: [VerificationObservation]? {
+        let list = observations.compactMap { $0 }
+        guard list.count == activeDelaysMilliseconds.count else { return nil }
+        return list
+    }
+
+    public var spreadMilliseconds: Double? {
+        guard let list = acceptedObservations else { return nil }
+        let arrivals = list.map(\.arrivalMilliseconds)
+        guard let minA = arrivals.min(), let maxA = arrivals.max(), minA.isFinite, maxA.isFinite else { return nil }
+        return maxA - minA
+    }
+}
+
+public struct GenerationCorrectionVector: Sendable, Equatable {
+    public struct SpeakerCorrection: Sendable, Equatable {
+        public let speakerIndex: Int
+        public let arrivalMilliseconds: Double
+        public let activeDelayMilliseconds: Double
+        public let observationAgeSeconds: Double
+        public let deltaMilliseconds: Double
+        public let newDelayMilliseconds: Double
+        public let applied: Bool
+        public let reason: String
+
+        public init(
+            speakerIndex: Int,
+            arrivalMilliseconds: Double,
+            activeDelayMilliseconds: Double,
+            observationAgeSeconds: Double,
+            deltaMilliseconds: Double,
+            newDelayMilliseconds: Double,
+            applied: Bool,
+            reason: String
+        ) {
+            self.speakerIndex = speakerIndex
+            self.arrivalMilliseconds = arrivalMilliseconds
+            self.activeDelayMilliseconds = activeDelayMilliseconds
+            self.observationAgeSeconds = observationAgeSeconds
+            self.deltaMilliseconds = deltaMilliseconds
+            self.newDelayMilliseconds = newDelayMilliseconds
+            self.applied = applied
+            self.reason = reason
+        }
+    }
+
+    public let generationIndex: Int
+    public let targetArrivalMilliseconds: Double
+    public let corrections: [SpeakerCorrection]
+    public let newDelayVectorMilliseconds: [Double]
+    public let hasChanges: Bool
+
+    public init(
+        generationIndex: Int,
+        targetArrivalMilliseconds: Double,
+        corrections: [SpeakerCorrection],
+        newDelayVectorMilliseconds: [Double],
+        hasChanges: Bool
+    ) {
+        self.generationIndex = generationIndex
+        self.targetArrivalMilliseconds = targetArrivalMilliseconds
+        self.corrections = corrections
+        self.newDelayVectorMilliseconds = newDelayVectorMilliseconds
+        self.hasChanges = hasChanges
+    }
+}
+
+extension AdaptiveCalibrationController {
+
+    public static func calculateGenerationCorrections(
+        generation: VerificationGeneration,
+        currentElapsedSeconds: Double,
+        maximumSanityDeltaMilliseconds: Double = defaultSanityBoundDeltaMilliseconds
+    ) -> GenerationCorrectionVector? {
+        guard let acceptedList = generation.acceptedObservations else { return nil }
+        let arrivals = acceptedList.map(\.arrivalMilliseconds)
+        guard let targetArrival = arrivals.max(), targetArrival.isFinite else { return nil }
+
+        var corrections: [GenerationCorrectionVector.SpeakerCorrection] = []
+        var newDelays: [Double] = []
+        var anyApplied = false
+
+        for speaker in 0..<generation.activeDelaysMilliseconds.count {
+            let activeDelay = generation.activeDelaysMilliseconds[speaker]
+            guard let obs = generation.observations[speaker] else { return nil }
+            let arr = obs.arrivalMilliseconds
+            let obsAge = max(0.0, currentElapsedSeconds - obs.elapsedSeconds)
+            let delta = targetArrival - arr
+
+            if abs(delta) > maximumSanityDeltaMilliseconds {
+                corrections.append(.init(
+                    speakerIndex: speaker,
+                    arrivalMilliseconds: arr,
+                    activeDelayMilliseconds: activeDelay,
+                    observationAgeSeconds: obsAge,
+                    deltaMilliseconds: delta,
+                    newDelayMilliseconds: activeDelay,
+                    applied: false,
+                    reason: "Correction delta \(delta) ms exceeds sanity bound \(maximumSanityDeltaMilliseconds) ms"
+                ))
+                newDelays.append(activeDelay)
+            } else if abs(delta) <= 0.1 {
+                corrections.append(.init(
+                    speakerIndex: speaker,
+                    arrivalMilliseconds: arr,
+                    activeDelayMilliseconds: activeDelay,
+                    observationAgeSeconds: obsAge,
+                    deltaMilliseconds: delta,
+                    newDelayMilliseconds: activeDelay,
+                    applied: false,
+                    reason: "Correction delta \(delta) ms below threshold 0.1 ms"
+                ))
+                newDelays.append(activeDelay)
+            } else {
+                let updatedDelay = max(0.0, activeDelay + delta)
+                corrections.append(.init(
+                    speakerIndex: speaker,
+                    arrivalMilliseconds: arr,
+                    activeDelayMilliseconds: activeDelay,
+                    observationAgeSeconds: obsAge,
+                    deltaMilliseconds: delta,
+                    newDelayMilliseconds: updatedDelay,
+                    applied: true,
+                    reason: "Adjusting delay by \(delta) ms (target \(targetArrival) ms - current \(arr) ms)"
+                ))
+                newDelays.append(updatedDelay)
+                anyApplied = true
+            }
+        }
+
+        return GenerationCorrectionVector(
+            generationIndex: generation.generationIndex,
+            targetArrivalMilliseconds: targetArrival,
+            corrections: corrections,
+            newDelayVectorMilliseconds: newDelays,
+            hasChanges: anyApplied
+        )
+    }
+
+    public static func identifyStaleSpeakers(
+        observations: [VerificationObservation],
+        isBluetoothOrDrifting: [Bool],
+        maximumSkewSeconds: Double = 5.0
+    ) -> [Int] {
+        let elapsedTimes = observations.map(\.elapsedSeconds)
+        guard let maxTime = elapsedTimes.max(), let minTime = elapsedTimes.min() else { return [] }
+        guard (maxTime - minTime) > maximumSkewSeconds else { return [] }
+
+        var staleBluetooth: [Int] = []
+        var staleOther: [Int] = []
+
+        for obs in observations {
+            if (maxTime - obs.elapsedSeconds) > maximumSkewSeconds {
+                if obs.speakerIndex < isBluetoothOrDrifting.count && isBluetoothOrDrifting[obs.speakerIndex] {
+                    staleBluetooth.append(obs.speakerIndex)
+                } else {
+                    staleOther.append(obs.speakerIndex)
+                }
+            }
+        }
+
+        if !staleBluetooth.isEmpty {
+            return staleBluetooth
+        }
+        return staleOther
+    }
+
+    public static func formatGenerationTable(
+        generation: VerificationGeneration,
+        speakerNames: [String],
+        currentElapsedSeconds: Double
+    ) -> String {
+        var lines: [String] = []
+        lines.append("speaker | arrival | delay | accepted | measurement age")
+        lines.append("------------------------------------------------------------")
+        for speaker in 0..<generation.activeDelaysMilliseconds.count {
+            let name = speaker < speakerNames.count ? speakerNames[speaker] : "Speaker \(speaker)"
+            let delayStr = String(format: "%.3f ms", generation.activeDelaysMilliseconds[speaker])
+            if let obs = generation.observations[speaker] {
+                let arrStr = String(format: "%.3f ms", obs.arrivalMilliseconds)
+                let ageStr = String(format: "%.2f s", max(0.0, currentElapsedSeconds - obs.elapsedSeconds))
+                lines.append("\(name) | \(arrStr) | \(delayStr) | true | \(ageStr)")
+            } else {
+                lines.append("\(name) | N/A | \(delayStr) | false | N/A")
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+}

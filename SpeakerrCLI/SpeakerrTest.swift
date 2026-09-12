@@ -37,6 +37,8 @@ struct SpeakerrTest {
                 try await play(arguments: Array(arguments.dropFirst()))
             case "calibrate":
                 try await calibrate(arguments: Array(arguments.dropFirst()))
+            case "calibrate-multi":
+                try await calibrateMulti(arguments: Array(arguments.dropFirst()))
             case "system-audio":
                 try await systemAudio(arguments: Array(arguments.dropFirst()))
             default:
@@ -605,6 +607,86 @@ struct SpeakerrTest {
             index += 2
         }
         return result
+    }
+
+    private static func calibrateMulti(arguments: [String]) async throws {
+        var outputUIDs: [String] = [
+            "BuiltInSpeakerDevice",
+            "74-68-59-E0-71-4C:output",
+            "68-59-32-EA-E5-67:output",
+            "68-F2-1F-55-9C-BA:output"
+        ]
+        var micUID = "BuiltInMicrophoneDevice"
+        var gain = 0.50
+
+        var index = 0
+        while index < arguments.count {
+            let opt = arguments[index]
+            if opt == "--outputs" && index + 1 < arguments.count {
+                outputUIDs = arguments[index + 1].split(separator: ",").map(String.init)
+                index += 2
+            } else if opt == "--mic" && index + 1 < arguments.count {
+                micUID = arguments[index + 1]
+                index += 2
+            } else if opt == "--gain" && index + 1 < arguments.count {
+                if let g = Double(arguments[index + 1]) { gain = g }
+                index += 2
+            } else {
+                index += 1
+            }
+        }
+
+        let discovery = AudioDeviceDiscovery()
+        let availableOutputs = try discovery.outputDevices().filter { !$0.isAggregate }
+        let availableInputs = try discovery.inputDevices()
+
+        var selectedOutputs: [OutputDevice] = []
+        for uid in outputUIDs {
+            if let found = availableOutputs.first(where: { $0.id == uid || $0.name.localizedCaseInsensitiveContains(uid) }) {
+                selectedOutputs.append(found)
+            } else {
+                throw CLIError.outputNotFound(uid)
+            }
+        }
+
+        guard let mic = availableInputs.first(where: { $0.id == micUID || $0.name.localizedCaseInsensitiveContains(micUID) }) else {
+            throw CLIError.inputNotFound(micUID)
+        }
+
+        guard await requestMicrophoneAccess() else {
+            throw CalibrationSessionError.inputUnavailable("\(mic.name) (microphone permission denied)")
+        }
+
+        print("=== 4-Speaker Discrete Generation Calibration ===")
+        for (idx, out) in selectedOutputs.enumerated() {
+            print("  Output [\(idx)]: \(out.name) [\(out.id)] (transport: \(out.transport.rawValue))")
+        }
+        print("  Microphone: \(mic.name) [\(mic.id)]")
+        print("  Gain: \(gain)\n")
+
+        let session = try PersistentSpeakerSession(outputs: selectedOutputs)
+        try session.start(calibrationLevel: gain)
+
+        var config = CalibrationExperimentConfiguration()
+        config.level = gain
+        config.targetResidualMilliseconds = 2.0
+        config.maximumVerificationGenerations = 3
+        config.maximumMeasurementAgeSkewSeconds = 5.0
+
+        do {
+            let passes = try await session.performCalibration(input: mic, configuration: config)
+            print("\n=== Calibration Succeeded ===")
+            print("Total passes/generations completed: \(passes.count)")
+            if let last = passes.last {
+                print("Final spread: \(String(format: "%.3f", last.residualSpreadMilliseconds ?? .nan)) ms")
+            }
+        } catch {
+            print("\n=== Calibration Failed ===")
+            print("Error: \(error.localizedDescription)")
+        }
+
+        session.stop()
+        print("Done.")
     }
 
     private static func parseCalibrationOptions(_ arguments: [String]) throws -> CalibrationOptions {
